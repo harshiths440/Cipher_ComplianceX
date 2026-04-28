@@ -9,6 +9,7 @@ Endpoints:
 
 import json
 from pathlib import Path
+from typing import Optional
 
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
@@ -16,6 +17,7 @@ from dotenv import load_dotenv
 
 from chromadb_client import search_regulation
 from langgraph_orchestrator import run_analysis
+from news_fetcher import get_regulatory_news, get_cache_info
 
 # ---------------------------------------------------------------------------
 # Bootstrap
@@ -150,6 +152,31 @@ async def search_regulations(q: str = Query(..., description="Plain-English comp
         "query": q.strip(),
         "results": results,
         "total": len(results),
+    }
+
+
+@app.get("/news", tags=["News"])
+async def get_news(
+    category: Optional[str] = Query(None, description="Filter by category: GST | Corporate | Tax | Securities | General"),
+    limit: int = Query(20, ge=1, le=50, description="Maximum number of items to return"),
+):
+    """
+    Fetch live Indian regulatory news from PIB, SEBI, Income Tax, and MCA.
+    Results are cached for 30 minutes. Falls back to curated sample data if
+    all live sources are unavailable.
+    """
+    items = await get_regulatory_news(max_items=50)
+
+    if category:
+        items = [i for i in items if i["category"].lower() == category.lower()]
+
+    cache_info = get_cache_info()
+
+    return {
+        "items": items[:limit],
+        "total": len(items),
+        "cached": cache_info["cached"],
+        "last_updated": cache_info["last_updated"],
     }
 
 

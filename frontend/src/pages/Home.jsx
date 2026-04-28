@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { getCompanies, analyzeCompany } from '../api/client';
 import { motion } from 'framer-motion';
 import { ChevronDown, Building2, ShieldCheck, Activity, Loader2, ArrowRight } from 'lucide-react';
+import RegulatoryNews from '../components/RegulatoryNews';
 
 const doctors = [
   { emoji: '📡', name: 'The News Reader', desc: 'Monitors every new regulation from MCA, SEBI, GST, Income Tax' },
@@ -189,6 +190,9 @@ const Home = () => {
             ))}
           </div>
         </motion.div>
+
+        {/* Regulatory News Section */}
+        <RegulatoryNews />
       </div>
     </div>
   );

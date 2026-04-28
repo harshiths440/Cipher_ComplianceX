@@ -314,12 +314,21 @@ const Calendar = () => {
               >
                 Close
               </button>
-              <button 
-                onClick={handleMarkInProgress}
-                className="px-4 py-2 text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-500 rounded-lg transition-colors"
-              >
-                Mark as In Progress
-              </button>
+              {inProgressItems.has(selectedAction.originalName) ? (
+                <button 
+                  disabled
+                  className="px-4 py-2 text-sm font-medium text-white bg-[#22C55E] rounded-lg cursor-not-allowed"
+                >
+                  ✓ Already In Progress
+                </button>
+              ) : (
+                <button 
+                  onClick={handleMarkInProgress}
+                  className="px-4 py-2 text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-500 rounded-lg transition-colors"
+                >
+                  Mark as In Progress
+                </button>
+              )}
             </div>
           </div>
         </div>
