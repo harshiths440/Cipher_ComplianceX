@@ -17,9 +17,9 @@ India has 1.5M+ registered companies. Every single one needs MCA, SEBI, GST, and
 
 | Doctor      | Role              | What it does                                                  |
 | ----------- | ----------------- | ------------------------------------------------------------- |
-| 📡 Doctor 1 | The News Reader   | Monitors 40+ curated regulations across MCA, SEBI, GST, Income Tax and surfaces AI-analyzed breakdowns |
+| 📡 Doctor 1 | The News & Auditor| Monitors 40+ regulations across MCA/SEBI/GST and cross-references them against your CA's filings to detect outdated work |
 | ⚖️ Doctor 2 | The Rule Checker  | Checks your company against every active compliance rule      |
-| 🧮 Doctor 3 | The Tax Expert    | Calculates tax liability and identifies savings opportunities  |
+| 🧮 Doctor 3 | The Tax Expert    | Calculates advance tax, TDS, MAT liability, and identifies Section-based savings opportunities |
 | 📊 Doctor 4 | The Risk Detector | Scores your company 0–100 and explains every risk factor      |
 | 🏛️ Doctor 5 | The Secretary     | Manages your compliance calendar and never misses a deadline  |
 
@@ -99,6 +99,8 @@ Frontend runs at `http://localhost:5173`
 | GET    | `/search-regulation?q={}` | Semantic regulation search                                         |
 | GET    | `/news`                   | Live + curated regulatory news (merged, sorted by date)           |
 | POST   | `/news/analyze`           | AI-powered structured analysis of a regulatory news item          |
+| GET    | `/tax/{cin}`              | Tax Expert full analysis for a company (Advance tax, TDS, MAT, savings) |
+| GET    | `/ca-verify/{cin}`        | CA filing verification against regulation changes                 |
 | GET    | `/docs`                   | Interactive API documentation                                      |
 
 ### `POST /news/analyze` — Request body

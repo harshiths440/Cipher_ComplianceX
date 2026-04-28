@@ -28,6 +28,8 @@
   - Returns: `rule_name`, `what_changed`, `who_it_hits`, `what_to_do[]`, `deadline`, `penalty`, `severity`, `compared_to_before`
 - [x] 40-item curated regulatory news dataset (10 per category: GST, Corporate, Tax, Securities)
 - [x] News merge logic — FALLBACK_NEWS always included, live scraped items deduped and appended
+- [x] `GET /tax/{cin}` — Doctor 3 (Tax Expert) computing advance tax, TDS (192/194J/194I/194C), MAT check, and sector-based savings
+- [x] `GET /ca-verify/{cin}` — CA Audit Trail cross-referencing synthesised CA filings against the 40-item regulatory news dataset to detect OUTDATED and AT_RISK filings
 
 ### Frontend (React + Vite + Tailwind)
 - [x] Home page with company dropdown populated from live API
@@ -47,6 +49,11 @@
 - [x] Glowing Analyze button with hover effect and custom loading state
 - [x] Doctor cards with dark backgrounds, left-border accents, and stagger animations
 - [x] Stats bar with 3 primary compliance metrics
+
+### Dashboard UI (Tabs)
+- [x] **Overview Tab** — Risk gauge, SHAP factors, active violations, AI remediation, and relevant regulations
+- [x] **Tax Analysis Tab** — Advance tax timeline, TDS obligations table, MAT check card, and savings opportunities
+- [x] **CA Audit Tab** — Filing verification table with AT_RISK / OUTDATED status badges and expandable row panels for finding & recommendation details
 
 ### Regulatory News UI (Doctor 1)
 - [x] Category filter pills — All / GST / Corporate / Tax / Securities / General
@@ -84,11 +91,6 @@
 
 ## 📋 Planned (Post-Hackathon Roadmap)
 
-### Phase 2 — CA Compliance Verification
-- [ ] CA Audit Trail: cross-reference CA filings against regulation database
-- [ ] Flag filings made before a new circular vs. after — detect outdated compliance
-- [ ] "Your CA filed on [date]. A new SEBI circular was active. Was it applied?"
-
 ### Phase 3 — Live Data Integration
 - [ ] MCA21 V3 REST API integration (replace static dataset)
 - [ ] GSTN Sandbox API for live GST data
@@ -96,7 +98,6 @@
 - [ ] Doctor 1 (News Reader) — live regulatory change detection with diff-against-previous
 
 ### Phase 4 — Full Agent Activation
-- [ ] Doctor 3 (Tax Expert) — corporate and personal tax liability computation
 - [ ] Redis Pub/Sub messaging between agents
 - [ ] Multi-tenant support — CA firm managing multiple client companies
 - [ ] Email/SMS deadline alerts
