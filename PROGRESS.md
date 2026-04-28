@@ -32,6 +32,23 @@
 - [x] `PUT /filing-requests/{id}/file` — CA marks a filing as FILED with ACK number + portal
 - [x] `PUT /filing-requests/{id}/progress` — CA marks a filing as IN_PROGRESS
 - [x] **`POST /auth/login`** — Executive Portal login (CIN + password → session, 401 on fail)
+- [x] **`GET /activity-log`** — Returns last 20 automation engine entries (newest first)
+- [x] **`POST /demo/trigger-regulation`** — Injects a custom regulation and immediately runs the detector against all companies
+- [x] **`GET /score-update/{cin}`** — Returns latest risk score recalculation delta after a filing is marked FILED
+- [x] **`POST /chat`** — Gemini-powered compliance chat (fixed `Part.from_text` keyword arg bug; upgraded to `gemini-2.5-flash`)
+
+### Automation Engine (`backend/scheduler.py`) ⭐ NEW
+- [x] `AsyncIOScheduler` (APScheduler 3.11) started via FastAPI lifespan hook
+- [x] **`job_deadline_scanner`** — Runs every 60s; scans all 12 companies for overdue GST/MCA/Tax filings; auto-creates alerts + filing requests (deduplication-safe)
+- [x] **`job_regulation_detector`** — Fetches live news, filters to last 7 days, maps sector → affected companies, creates alerts for novel regulation+company combos
+- [x] **`job_filing_escalator`** — Escalates PENDING filing requests to HIGH alert after 24h, EMERGENCY after 48h
+- [x] **`activity_log`** — In-memory list (max 50 entries, newest-first) tracking all automation events with icon, timestamp, company, and severity
+
+### Risk Score Recalculation on Filing (`filing_tracker.py`)
+- [x] `mark_filed()` now calls `RuleEngine().evaluate()` + `RiskScorer().score()` after marking FILED
+- [x] Stores `{ previous_score, new_score, recalculated_at, triggered_by }` in `score_cache[cin]`
+- [x] Emits a `📉` activity log entry with the before → after delta
+- [x] Fully non-blocking — wrapped in `try/except` so a bad recalc never breaks the filing response
 
 ### AI Pipeline (LangGraph Orchestration)
 - [x] Node 1: `load_company` — loads from JSON dataset by CIN
@@ -58,6 +75,7 @@
 - [x] **CA Audit Tab** — Filing verification with AT_RISK / OUTDATED badges
 - [x] **🔴 Alerts Tab** — Polls `GET /alerts/{cin}` every 5s; shows executive alerts with urgency badges (LOW/HIGH/EMERGENCY pulsing); "Acknowledge + Reply" modal
 - [x] **📋 Filing Requests Tab** — Polls `GET /filing-requests/{cin}` every 5s; CA can mark IN_PROGRESS or FILED (with ACK number + portal selection)
+- [x] **⚡ Activity Feed** — `ActivityFeed.jsx` appended to the Overview tab; polls `/activity-log` every 5s; filters entries to the current company; CRITICAL entries have red left border; countdown timer shows next scan
 
 ### Regulatory News UI
 - [x] Category filter pills — All / GST / Corporate / Tax / Securities / General
@@ -83,6 +101,8 @@
   - **CA Filing Tracker** table — polls `GET /filing-requests/{cin}` every 5s to reflect CA updates in real time
   - **"Request Filing"** button → sends `POST /filing-requests/{cin}` to ask CA to file a form
   - Regulatory Impact Feed — sector-filtered news cards with detail modal
+  - **🤖 Ask Compliance AI** — Gemini chat with suggested query pills, scroll-to-bottom, loading state; sends company context as system prompt
+  - **⚡ Activity Feed** — Appended below CA Audit; same `ActivityFeed.jsx` component, filtered to this company; live 🟢 status dot
   - **Sign Out** button clears sessionStorage and returns to login
 
 ### Credential System
@@ -163,6 +183,7 @@ Executive Portal (5174)          CA Portal (5173)
 ## 🚧 In Progress
 
 - [ ] Demo script finalization
+- [ ] Wire `GET /score-update/{cin}` into Executive Dashboard UI for a visible risk delta card
 
 ---
 
@@ -193,3 +214,5 @@ Executive Portal (5174)          CA Portal (5173)
 - Calendar status does not persist across page refreshes (session only)
 - General category has no curated news items (intentional — shows stale fallback UI demo)
 - SEBI / Income Tax scrapers occasionally blocked by bot detection; curated dataset covers the gap
+- `gemini-2.0-flash` free-tier quota may exhaust during heavy demo use; all AI calls now use `gemini-2.5-flash`
+- Automation activity log also resets on backend restart (in-memory only)
