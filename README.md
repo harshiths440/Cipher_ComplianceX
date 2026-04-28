@@ -1,6 +1,6 @@
 # Cipher — ComplianceX 4.0
 
-> **5 AI Doctors monitoring your company's compliance health.**  
+> **5 AI Doctors monitoring your company's compliance health.**
 > AI-powered compliance intelligence platform for Indian corporates — built at a 24-hour hackathon.
 
 ---
@@ -17,9 +17,9 @@ India has 1.5M+ registered companies. Every single one needs MCA, SEBI, GST, and
 
 | Doctor      | Role              | What it does                                                  |
 | ----------- | ----------------- | ------------------------------------------------------------- |
-| 📡 Doctor 1 | The News Reader   | Monitors every new regulation from MCA, SEBI, GST, Income Tax |
+| 📡 Doctor 1 | The News Reader   | Monitors 40+ curated regulations across MCA, SEBI, GST, Income Tax and surfaces AI-analyzed breakdowns |
 | ⚖️ Doctor 2 | The Rule Checker  | Checks your company against every active compliance rule      |
-| 🧮 Doctor 3 | The Tax Expert    | Calculates tax liability and identifies savings opportunities |
+| 🧮 Doctor 3 | The Tax Expert    | Calculates tax liability and identifies savings opportunities  |
 | 📊 Doctor 4 | The Risk Detector | Scores your company 0–100 and explains every risk factor      |
 | 🏛️ Doctor 5 | The Secretary     | Manages your compliance calendar and never misses a deadline  |
 
@@ -27,24 +27,33 @@ India has 1.5M+ registered companies. Every single one needs MCA, SEBI, GST, and
 
 ## 🏗️ Architecture
 
+```
 User Input (CIN)
 ↓
 Master Orchestrator (LangGraph State Machine)
 ↓
-┌─────────────────────────────────────────┐
-│ Rule Engine → Risk Scorer → ChromaDB │
-│ Regulation Search → Gemini Remediation │
-└─────────────────────────────────────────┘
+┌──────────────────────────────────────────────────┐
+│  Rule Engine → Risk Scorer → ChromaDB            │
+│  Regulation Search → Gemini Remediation          │
+└──────────────────────────────────────────────────┘
 ↓
 ComplianceStatus JSON → React Dashboard
+
+News Feed:
+Live scrapers (PIB / SEBI / Income Tax / MCA)
+  + 40-item curated synthetic dataset
+  → merged, deduped, sorted by date
+  → POST /news/analyze → Gemini 2.0 Flash
+  → Structured breakdown modal (Rule, Impact, Actions, Deadline, Penalty)
+```
 
 **Tech Stack:**
 
 - **Backend:** Python, FastAPI, LangGraph, ChromaDB, Sentence Transformers
-- **AI:** Google Gemini 2.0 Flash (remediation generation)
+- **AI:** Google Gemini 2.0 Flash (remediation + news analysis)
 - **Vector DB:** ChromaDB with all-MiniLM-L6-v2 embeddings
 - **Frontend:** React, Vite, Tailwind CSS, Framer Motion
-- **Data:** Pre-loaded MCA company dataset with real compliance histories
+- **Data:** 12-company MCA dataset + 40-item curated regulatory news dataset
 
 ---
 
@@ -82,27 +91,68 @@ Frontend runs at `http://localhost:5173`
 
 ## 📡 API Endpoints
 
-| Method | Endpoint                  | Description                     |
-| ------ | ------------------------- | ------------------------------- |
-| GET    | `/companies`              | List all companies              |
-| GET    | `/company/{cin}`          | Get full company details        |
-| POST   | `/analyze/{cin}`          | Run full AI compliance analysis |
-| GET    | `/search-regulation?q={}` | Semantic regulation search      |
-| GET    | `/docs`                   | Interactive API documentation   |
+| Method | Endpoint                  | Description                                                        |
+| ------ | ------------------------- | ------------------------------------------------------------------ |
+| GET    | `/companies`              | List all companies                                                 |
+| GET    | `/company/{cin}`          | Get full company details                                           |
+| POST   | `/analyze/{cin}`          | Run full AI compliance analysis                                    |
+| GET    | `/search-regulation?q={}` | Semantic regulation search                                         |
+| GET    | `/news`                   | Live + curated regulatory news (merged, sorted by date)           |
+| POST   | `/news/analyze`           | AI-powered structured analysis of a regulatory news item          |
+| GET    | `/docs`                   | Interactive API documentation                                      |
+
+### `POST /news/analyze` — Request body
+
+```json
+{
+  "title": "string",
+  "link":  "string",
+  "source": "string",
+  "category": "GST | Corporate | Tax | Securities | General"
+}
+```
+
+Returns a structured JSON with `rule_name`, `what_changed`, `who_it_hits`, `what_to_do[]`, `deadline`, `penalty`, `severity`, `compared_to_before`.
+
+Lookup order:
+1. Exact title / rule_name match in curated dataset → instant pre-baked response
+2. Scrape page + Gemini 2.0 Flash → AI-generated response
 
 ---
 
 ## 📊 Risk Scoring Model
 
+```
 Score = Σ(violation severity points)
+  overdue filings    × 5   (max 20)
+  sector risk index  × 10
+  disqualified dirs  × 15
+  violations last 12m × 3
+  chronic delay bonus  +8 (if avg > 60 days)
+  Capped at 100
+```
 
-- overdue filings × 5 (max 20)
-- sector risk index × 10
-- disqualified directors × 15
-- violations last 12m × 3
-- chronic delay bonus (8 pts if avg > 60 days)
-  Capped at 100.
-  Buckets: 0–25 LOW | 26–50 MEDIUM | 51–75 HIGH | 76–100 CRITICAL
+Buckets: `0–25 LOW` | `26–50 MEDIUM` | `51–75 HIGH` | `76–100 CRITICAL`
+
+---
+
+## 📰 Regulatory News System
+
+40 curated items across 4 categories (10 each), all with pre-baked AI analysis:
+
+| Category   | Coverage |
+|------------|----------|
+| GST        | E-invoicing, ITC reversal, GSTR-1/3B/9 rules, composition scheme, audit, QRMP, HSN codes, refunds |
+| Corporate  | DIR-3 KYC, MGT-7A, CSR threshold, board meetings, XBRL, share demat, ESG, auditor rotation, OPC |
+| Tax        | TDS/TCS rules, advance tax, ITR-B, Form 26AS, Section 43B(h), PAN-Aadhaar, standard deduction |
+| Securities | LODR, RPT, T+0 settlement, insider trading, SCORES 2.0, ESG disclosure, TER cap, IPO, FPI KYC |
+
+Features:
+- **Always-visible synthetic data** — curated items are always merged with any live-scraped news
+- **Stale category fallback** — if a category tab has no recent live news, shows the last-ever item in that category with a muted dashed card and ⚠️ warning banner
+- **Detail modal** — clicking any card opens a full-screen structured breakdown instead of navigating away
+- **Per-card analysis cache** — re-opening the same card is instant (no re-fetch)
+- **VS BEFORE diff** — side-by-side red/green comparison of old vs new rule when an amendment is detected
 
 ---
 
@@ -138,5 +188,6 @@ ComplianceX is a decision-support tool, not a decision-making tool. All outputs 
 1. Harsh Bharati
 2. Harshith S Gowda
 3. Rohan Sai Jagan
-4. Teju S M  
-   Built in 24 hours at TECHFUSION 2.0.
+4. Teju S M
+
+Built in 24 hours at TECHFUSION 2.0.

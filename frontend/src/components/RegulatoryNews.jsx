@@ -1,94 +1,323 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 
 const API_BASE = 'http://localhost:8000';
-
 const CATEGORIES = ['All', 'GST', 'Corporate', 'Tax', 'Securities', 'General'];
-
-const CATEGORY_STYLES = {
-  GST:        { bg: 'bg-green-500/10',  text: 'text-green-400',  border: 'border-green-500/20' },
-  Securities: { bg: 'bg-indigo-500/10', text: 'text-indigo-400', border: 'border-indigo-500/20' },
-  Tax:        { bg: 'bg-yellow-500/10', text: 'text-yellow-400', border: 'border-yellow-500/20' },
-  Corporate:  { bg: 'bg-orange-500/10', text: 'text-orange-400', border: 'border-orange-500/20' },
-  General:    { bg: 'bg-gray-500/10',   text: 'text-gray-400',   border: 'border-gray-500/20'  },
-};
-
 const PAGE_SIZE = 6;
 
-// ─── Skeleton Card ──────────────────────────────────────────────────────────
+const CATEGORY_STYLES = {
+  GST:        { bg: 'rgba(34,197,94,0.1)',   text: '#4ade80', border: 'rgba(34,197,94,0.25)' },
+  Securities: { bg: 'rgba(99,102,241,0.1)',  text: '#818cf8', border: 'rgba(99,102,241,0.25)' },
+  Tax:        { bg: 'rgba(234,179,8,0.1)',   text: '#facc15', border: 'rgba(234,179,8,0.25)' },
+  Corporate:  { bg: 'rgba(249,115,22,0.1)',  text: '#fb923c', border: 'rgba(249,115,22,0.25)' },
+  General:    { bg: 'rgba(148,163,184,0.1)', text: '#94a3b8', border: 'rgba(148,163,184,0.25)' },
+};
+
+const SEVERITY_COLORS = {
+  HIGH:   { bg: 'rgba(239,68,68,0.15)',   text: '#ef4444', border: 'rgba(239,68,68,0.4)' },
+  MEDIUM: { bg: 'rgba(245,158,11,0.15)',  text: '#f59e0b', border: 'rgba(245,158,11,0.4)' },
+  LOW:    { bg: 'rgba(34,197,94,0.15)',   text: '#22c55e', border: 'rgba(34,197,94,0.4)' },
+};
+
+// ─── Skeleton ────────────────────────────────────────────────────────────────
 const SkeletonCard = () => (
-  <div className="bg-[#111827] border border-white/5 rounded-xl p-5 space-y-3 animate-pulse">
-    <div className="flex justify-between items-start">
-      <div className="h-4 bg-white/10 rounded w-24" />
-      <div className="h-5 bg-white/10 rounded w-16" />
+  <div style={{ background: '#111827', border: '1px solid rgba(255,255,255,0.05)', borderRadius: 12, padding: 20 }} className="animate-pulse space-y-3">
+    <div style={{ display:'flex', justifyContent:'space-between' }}>
+      <div style={{ height:14, background:'rgba(255,255,255,0.08)', borderRadius:6, width:96 }} />
+      <div style={{ height:18, background:'rgba(255,255,255,0.08)', borderRadius:6, width:60 }} />
     </div>
-    <div className="space-y-2">
-      <div className="h-4 bg-white/10 rounded w-full" />
-      <div className="h-4 bg-white/10 rounded w-4/5" />
-    </div>
-    <div className="h-3 bg-white/10 rounded w-20 mt-2" />
+    <div style={{ height:14, background:'rgba(255,255,255,0.08)', borderRadius:6, width:'100%' }} />
+    <div style={{ height:14, background:'rgba(255,255,255,0.08)', borderRadius:6, width:'80%' }} />
+    <div style={{ height:12, background:'rgba(255,255,255,0.08)', borderRadius:6, width:80 }} />
   </div>
 );
 
-// ─── News Card ───────────────────────────────────────────────────────────────
-const NewsCard = ({ item, index }) => {
-  const catStyle = CATEGORY_STYLES[item.category] || CATEGORY_STYLES.General;
+// ─── Stale Banner ─────────────────────────────────────────────────────────────
+const StaleBanner = ({ category, date }) => (
+  <div style={{
+    display: 'flex', alignItems: 'center', gap: 10,
+    background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.25)',
+    borderRadius: 10, padding: '10px 16px', marginBottom: 16,
+    color: '#f59e0b', fontSize: 13, fontWeight: 500,
+  }}>
+    <span style={{ fontSize: 16 }}>⚠️</span>
+    <span>No recent <strong>{category}</strong> updates — last update was <strong>{date}</strong></span>
+  </div>
+);
+
+// ─── News Card ────────────────────────────────────────────────────────────────
+const NewsCard = ({ item, index, stale, onClick }) => {
+  const cat = item.category || 'General';
+  const cs = CATEGORY_STYLES[cat] || CATEGORY_STYLES.General;
 
   return (
-    <motion.a
-      href={item.link}
-      target="_blank"
-      rel="noopener noreferrer"
+    <motion.div
       initial={{ opacity: 0, y: 16 }}
-      animate={{ opacity: 1, y: 0 }}
+      animate={{ opacity: stale ? 0.6 : 1, y: 0 }}
       transition={{ duration: 0.35, delay: index * 0.06, ease: 'easeOut' }}
-      className={[
-        'group block bg-[#111827] border border-white/5 rounded-xl p-5 cursor-pointer',
-        'transition-all duration-300',
-        'hover:-translate-y-1 hover:border-indigo-500/40 hover:shadow-[0_0_20px_rgba(99,102,241,0.15)]',
-      ].join(' ')}
+      onClick={onClick}
+      style={{
+        background: '#111827',
+        border: `1px ${stale ? 'dashed' : 'solid'} ${stale ? 'rgba(255,255,255,0.18)' : 'rgba(255,255,255,0.05)'}`,
+        borderRadius: 12, padding: 20, cursor: 'pointer',
+        transition: 'all 0.25s ease',
+      }}
+      whileHover={{ y: -4, boxShadow: '0 0 20px rgba(99,102,241,0.18)' }}
     >
-      {/* Top row */}
-      <div className="flex items-start justify-between mb-3 gap-2">
-        <span className="flex items-center gap-1.5 text-xs font-semibold text-indigo-400">
-          <span className="text-base">{item.source_icon}</span>
-          {item.source}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12, gap: 8 }}>
+        <span style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 600, color: '#818cf8' }}>
+          <span style={{ fontSize: 15 }}>{item.source_icon}</span>{item.source}
         </span>
-        <span
-          className={[
-            'text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded border',
-            catStyle.bg, catStyle.text, catStyle.border,
-          ].join(' ')}
-        >
-          {item.category}
-        </span>
+        <span style={{
+          fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em',
+          padding: '2px 8px', borderRadius: 99, border: `1px solid ${cs.border}`,
+          background: cs.bg, color: cs.text,
+        }}>{cat}</span>
       </div>
-
-      {/* Title */}
-      <p className="text-sm font-medium text-gray-100 leading-snug line-clamp-2 mb-3 group-hover:text-white transition-colors">
+      <p style={{ fontSize: 13, fontWeight: 500, color: '#f1f5f9', lineHeight: 1.5, marginBottom: 12, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
         {item.title}
       </p>
+      <p style={{ fontSize: 11, color: '#64748b' }}>{item.date}</p>
+    </motion.div>
+  );
+};
 
-      {/* Date */}
-      <p className="text-xs text-gray-500">{item.date}</p>
-    </motion.a>
+// ─── Dots Loader ──────────────────────────────────────────────────────────────
+const DotsLoader = () => {
+  const [dots, setDots] = useState('');
+  useEffect(() => {
+    const t = setInterval(() => setDots(d => d.length >= 3 ? '' : d + '.'), 500);
+    return () => clearInterval(t);
+  }, []);
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 24, padding: '60px 0' }}>
+      <div style={{ position: 'relative', width: 56, height: 56 }}>
+        <div style={{ position: 'absolute', inset: 0, borderRadius: '50%', border: '2px solid rgba(99,102,241,0.2)' }} />
+        <motion.div
+          animate={{ rotate: 360 }}
+          transition={{ duration: 1.2, repeat: Infinity, ease: 'linear' }}
+          style={{ position: 'absolute', inset: 0, borderRadius: '50%', border: '2px solid transparent', borderTopColor: '#818cf8' }}
+        />
+        <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20 }}>🔍</div>
+      </div>
+      <p style={{ color: '#94a3b8', fontSize: 14, fontWeight: 500 }}>Analyzing regulatory update{dots}</p>
+    </div>
+  );
+};
+
+// ─── News Detail Modal ────────────────────────────────────────────────────────
+const NewsDetailModal = ({ item, onClose, analysisCache }) => {
+  const [analysis, setAnalysis] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [fetchError, setFetchError] = useState(false);
+
+  useEffect(() => {
+    document.body.style.overflow = 'hidden';
+    return () => { document.body.style.overflow = ''; };
+  }, []);
+
+  useEffect(() => {
+    const key = item.title;
+    if (analysisCache.current.has(key)) {
+      setAnalysis(analysisCache.current.get(key));
+      setLoading(false);
+      return;
+    }
+    setLoading(true);
+    setFetchError(false);
+    fetch(`${API_BASE}/news/analyze`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ title: item.title, link: item.link, source: item.source, category: item.category }),
+    })
+      .then(r => r.json())
+      .then(data => {
+        analysisCache.current.set(key, data);
+        setAnalysis(data);
+      })
+      .catch(() => setFetchError(true))
+      .finally(() => setLoading(false));
+  }, [item, analysisCache]);
+
+  const sev = analysis?.severity || 'MEDIUM';
+  const sc = SEVERITY_COLORS[sev] || SEVERITY_COLORS.MEDIUM;
+
+  const SectionLabel = ({ children }) => (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 10, margin: '22px 0 10px' }}>
+      <div style={{ flex: 1, height: 1, background: 'rgba(255,255,255,0.07)' }} />
+      <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.1em', color: '#475569', textTransform: 'uppercase' }}>{children}</span>
+      <div style={{ flex: 1, height: 1, background: 'rgba(255,255,255,0.07)' }} />
+    </div>
+  );
+
+  return (
+    <AnimatePresence>
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        onClick={onClose}
+        style={{
+          position: 'fixed', inset: 0, zIndex: 9999,
+          background: 'rgba(0,0,0,0.75)', backdropFilter: 'blur(8px)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          padding: '20px 16px',
+        }}
+      >
+        <motion.div
+          initial={{ opacity: 0, scale: 0.96, y: 20 }}
+          animate={{ opacity: 1, scale: 1, y: 0 }}
+          exit={{ opacity: 0, scale: 0.96, y: 20 }}
+          transition={{ duration: 0.28, ease: 'easeOut' }}
+          onClick={e => e.stopPropagation()}
+          style={{
+            width: '100%', maxWidth: 680,
+            maxHeight: '90vh', overflowY: 'auto',
+            background: '#0d1117',
+            border: '1px solid rgba(255,255,255,0.08)',
+            borderRadius: 20,
+            padding: '28px 28px 24px',
+            boxShadow: '0 24px 80px rgba(0,0,0,0.6)',
+          }}
+        >
+          {/* ── Header row ── */}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
+            <span style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, fontWeight: 600, color: '#818cf8' }}>
+              <span style={{ fontSize: 18 }}>{item.source_icon}</span>{item.source}
+            </span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              {!loading && !fetchError && (
+                <span style={{
+                  fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase',
+                  padding: '3px 10px', borderRadius: 99,
+                  background: sc.bg, color: sc.text, border: `1px solid ${sc.border}`,
+                }}>{sev}</span>
+              )}
+              <button
+                onClick={onClose}
+                style={{ width: 32, height: 32, borderRadius: '50%', border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(255,255,255,0.05)', color: '#94a3b8', fontSize: 16, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+              >✕</button>
+            </div>
+          </div>
+
+          {/* ── Content ── */}
+          {loading ? (
+            <DotsLoader />
+          ) : fetchError ? (
+            <div style={{ textAlign: 'center', padding: '48px 0', color: '#64748b' }}>
+              <div style={{ fontSize: 32, marginBottom: 12 }}>⚠️</div>
+              <p style={{ fontSize: 14, marginBottom: 20 }}>Couldn't analyze this article right now.</p>
+              <a href={item.link} target="_blank" rel="noopener noreferrer"
+                style={{ color: '#818cf8', fontSize: 13, fontWeight: 600, textDecoration: 'none' }}>
+                🔗 Read original article →
+              </a>
+            </div>
+          ) : analysis && (
+            <>
+              {/* Rule name */}
+              <div style={{ marginBottom: 6 }}>
+                <p style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.1em', color: '#475569', textTransform: 'uppercase', marginBottom: 6 }}>📋 Rule Name</p>
+                <p style={{ fontSize: 22, fontWeight: 700, color: '#f1f5f9', lineHeight: 1.3 }}>{analysis.rule_name}</p>
+              </div>
+
+              {/* What changed */}
+              <SectionLabel>What Changed</SectionLabel>
+              <p style={{ fontSize: 14, color: '#cbd5e1', lineHeight: 1.7 }}>{analysis.what_changed}</p>
+
+              {/* VS Before (only if not null) */}
+              {analysis.compared_to_before && (
+                <>
+                  <SectionLabel>VS Before</SectionLabel>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                    <div style={{ background: 'rgba(239,68,68,0.07)', border: '1px solid rgba(239,68,68,0.2)', borderRadius: 10, padding: '12px 14px' }}>
+                      <p style={{ fontSize: 10, fontWeight: 700, color: '#f87171', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 8 }}>Before</p>
+                      <p style={{ fontSize: 13, color: '#fca5a5', lineHeight: 1.6 }}>{analysis.compared_to_before}</p>
+                    </div>
+                    <div style={{ background: 'rgba(34,197,94,0.07)', border: '1px solid rgba(34,197,94,0.2)', borderRadius: 10, padding: '12px 14px' }}>
+                      <p style={{ fontSize: 10, fontWeight: 700, color: '#4ade80', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 8 }}>After</p>
+                      <p style={{ fontSize: 13, color: '#86efac', lineHeight: 1.6 }}>{analysis.what_changed}</p>
+                    </div>
+                  </div>
+                </>
+              )}
+
+              {/* Who it hits */}
+              <SectionLabel>Who It Hits</SectionLabel>
+              <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, background: 'rgba(99,102,241,0.07)', border: '1px solid rgba(99,102,241,0.15)', borderRadius: 10, padding: '12px 16px' }}>
+                <span style={{ fontSize: 16, marginTop: 1 }}>🎯</span>
+                <p style={{ fontSize: 14, color: '#c7d2fe', lineHeight: 1.6 }}>{analysis.who_it_hits}</p>
+              </div>
+
+              {/* What to do */}
+              <SectionLabel>What You Need To Do</SectionLabel>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                {(analysis.what_to_do || []).map((step, i) => (
+                  <div key={i} style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
+                    <span style={{ minWidth: 26, height: 26, borderRadius: '50%', background: 'rgba(99,102,241,0.2)', color: '#818cf8', fontSize: 12, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{i + 1}</span>
+                    <p style={{ fontSize: 14, color: '#cbd5e1', lineHeight: 1.6, paddingTop: 3 }}>{step}</p>
+                  </div>
+                ))}
+              </div>
+
+              {/* Deadline + Penalty cards */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginTop: 22 }}>
+                <div style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.07)', borderRadius: 12, padding: '14px 16px' }}>
+                  <p style={{ fontSize: 10, fontWeight: 700, color: '#475569', letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 8 }}>📅 Deadline</p>
+                  <p style={{ fontSize: 14, fontWeight: 600, color: analysis.deadline ? '#f1f5f9' : '#475569' }}>
+                    {analysis.deadline || 'Not specified'}
+                  </p>
+                </div>
+                <div style={{ background: 'rgba(239,68,68,0.04)', border: '1px solid rgba(239,68,68,0.12)', borderRadius: 12, padding: '14px 16px' }}>
+                  <p style={{ fontSize: 10, fontWeight: 700, color: '#475569', letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 8 }}>⚠️ Penalty</p>
+                  <p style={{ fontSize: 14, fontWeight: 600, color: analysis.penalty ? '#fca5a5' : '#475569' }}>
+                    {analysis.penalty || 'Not specified'}
+                  </p>
+                </div>
+              </div>
+
+              {/* Footer actions */}
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 28, paddingTop: 20, borderTop: '1px solid rgba(255,255,255,0.06)' }}>
+                <a
+                  href={item.link} target="_blank" rel="noopener noreferrer"
+                  style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, fontWeight: 600, color: '#818cf8', textDecoration: 'none', padding: '8px 16px', border: '1px solid rgba(99,102,241,0.3)', borderRadius: 8, transition: 'all 0.2s' }}
+                >
+                  🔗 Read full circular →
+                </a>
+                <button
+                  onClick={onClose}
+                  style={{ fontSize: 13, fontWeight: 600, color: '#64748b', background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 8, padding: '8px 16px', cursor: 'pointer' }}
+                >
+                  ✕ Close
+                </button>
+              </div>
+            </>
+          )}
+        </motion.div>
+      </motion.div>
+    </AnimatePresence>
   );
 };
 
 // ─── Main Component ───────────────────────────────────────────────────────────
 const RegulatoryNews = () => {
-  const [allItems, setAllItems]     = useState([]);
-  const [loading, setLoading]       = useState(true);
+  const [allItems, setAllItems]         = useState([]);
+  const [loading, setLoading]           = useState(true);
   const [activeFilter, setActiveFilter] = useState('All');
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
+  const [selectedItem, setSelectedItem] = useState(null);
+  const analysisCache                   = useRef(new Map());
 
-  const fetchNews = useCallback(async (category) => {
+  // Escape key to close modal
+  useEffect(() => {
+    const handler = e => { if (e.key === 'Escape') setSelectedItem(null); };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, []);
+
+  const fetchNews = useCallback(async () => {
     setLoading(true);
-    setVisibleCount(PAGE_SIZE);
     try {
-      const params = new URLSearchParams({ limit: '50' });
-      if (category !== 'All') params.set('category', category);
-      const res = await fetch(`${API_BASE}/news?${params.toString()}`);
+      const res = await fetch(`${API_BASE}/news?limit=50`);
       if (!res.ok) throw new Error('fetch failed');
       const data = await res.json();
       setAllItems(data.items || []);
@@ -99,93 +328,112 @@ const RegulatoryNews = () => {
     }
   }, []);
 
-  useEffect(() => {
-    fetchNews(activeFilter);
-  }, [activeFilter, fetchNews]);
+  useEffect(() => { fetchNews(); }, [fetchNews]);
 
-  const visibleItems = allItems.slice(0, visibleCount);
-  const hasMore = visibleCount < allItems.length;
+  // ── Filtering logic ──────────────────────────────────────────────────────
+  const liveItems = activeFilter === 'All'
+    ? allItems
+    : allItems.filter(i => i.category === activeFilter);
+
+  // For stale fallback: find the most recent item ever for this category
+  const staleItem = (activeFilter !== 'All' && liveItems.length === 0)
+    ? (allItems.find(i => i.category === activeFilter) || null)
+    : null;
+
+  const isStale       = staleItem !== null;
+  const itemsToShow   = liveItems.length > 0 ? liveItems : (staleItem ? [staleItem] : []);
+  const visibleItems  = itemsToShow.slice(0, visibleCount);
+  const hasMore       = visibleCount < itemsToShow.length;
+  const totallyEmpty  = !loading && itemsToShow.length === 0;
 
   return (
-    <section className="w-full mt-20 mb-8">
-      {/* Section Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-8">
-        <div className="flex items-center gap-3">
-          <h2 className="text-2xl font-bold text-white">📡 Live Regulatory Updates</h2>
-          <span className="flex items-center gap-1.5 text-xs text-green-400 font-semibold">
-            <span className="relative flex h-2 w-2">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75" />
-              <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500" />
+    <section style={{ width: '100%', marginTop: 80, marginBottom: 32 }}>
+      {/* ── Section header ── */}
+      <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 16, marginBottom: 28 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <h2 style={{ fontSize: 22, fontWeight: 700, color: '#f1f5f9', margin: 0 }}>📡 Live Regulatory Updates</h2>
+          <span style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: '#4ade80', fontWeight: 600 }}>
+            <span style={{ position: 'relative', display: 'inline-flex', width: 8, height: 8 }}>
+              <span style={{ position: 'absolute', inset: 0, borderRadius: '50%', background: '#4ade80', opacity: 0.7, animation: 'ping 1.5s cubic-bezier(0,0,0.2,1) infinite' }} />
+              <span style={{ position: 'relative', display: 'inline-flex', borderRadius: '50%', width: 8, height: 8, background: '#22c55e' }} />
             </span>
             Live
           </span>
         </div>
-        <p className="text-sm text-gray-500">Showing recent regulatory updates</p>
+        <p style={{ fontSize: 13, color: '#475569', margin: 0 }}>
+          {isStale ? `Showing last known ${activeFilter} update` : 'Showing recent regulatory updates'}
+        </p>
       </div>
 
-      {/* Filter Pills */}
-      <div className="flex flex-wrap gap-2 mb-8">
+      {/* ── Filter pills ── */}
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 24 }}>
         {CATEGORIES.map(cat => (
           <button
             key={cat}
-            onClick={() => setActiveFilter(cat)}
-            className={[
-              'px-4 py-1.5 rounded-full text-xs font-semibold border transition-all duration-200',
-              activeFilter === cat
-                ? 'bg-indigo-600 border-indigo-500 text-white shadow-[0_0_12px_rgba(99,102,241,0.4)]'
-                : 'bg-white/5 border-white/10 text-gray-400 hover:border-indigo-500/50 hover:text-gray-200',
-            ].join(' ')}
-          >
-            {cat}
-          </button>
+            onClick={() => { setActiveFilter(cat); setVisibleCount(PAGE_SIZE); }}
+            style={{
+              padding: '6px 16px', borderRadius: 99, fontSize: 12, fontWeight: 600,
+              cursor: 'pointer', transition: 'all 0.2s ease',
+              background: activeFilter === cat ? '#4f46e5' : 'rgba(255,255,255,0.05)',
+              border: `1px solid ${activeFilter === cat ? '#6366f1' : 'rgba(255,255,255,0.1)'}`,
+              color: activeFilter === cat ? '#fff' : '#94a3b8',
+              boxShadow: activeFilter === cat ? '0 0 12px rgba(99,102,241,0.4)' : 'none',
+            }}
+          >{cat}</button>
         ))}
       </div>
 
-      {/* Grid */}
+      {/* ── Stale banner ── */}
+      {isStale && staleItem && (
+        <StaleBanner category={activeFilter} date={staleItem.date} />
+      )}
+
+      {/* ── Grid ── */}
       <AnimatePresence mode="wait">
         {loading ? (
-          <motion.div
-            key="skeletons"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="grid grid-cols-1 md:grid-cols-2 gap-4"
-          >
-            {Array.from({ length: PAGE_SIZE }).map((_, i) => (
-              <SkeletonCard key={i} />
-            ))}
+          <motion.div key="skeletons" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 16 }}>
+            {Array.from({ length: PAGE_SIZE }).map((_, i) => <SkeletonCard key={i} />)}
           </motion.div>
-        ) : allItems.length === 0 ? (
-          <motion.div
-            key="empty"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            className="text-center py-16 text-gray-500"
-          >
-            No updates found for this category.
+        ) : totallyEmpty ? (
+          <motion.div key="empty" initial={{ opacity: 0 }} animate={{ opacity: 1 }}
+            style={{ textAlign: 'center', padding: '64px 0', color: '#475569' }}>
+            <div style={{ fontSize: 40, marginBottom: 12 }}>📭</div>
+            <p style={{ fontSize: 15, fontWeight: 500 }}>No {activeFilter === 'All' ? '' : activeFilter + ' '}updates found</p>
           </motion.div>
         ) : (
-          <motion.div
-            key="cards"
-            className="grid grid-cols-1 md:grid-cols-2 gap-4"
-          >
+          <motion.div key="cards"
+            style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 16 }}>
             {visibleItems.map((item, idx) => (
-              <NewsCard key={`${item.link}-${idx}`} item={item} index={idx} />
+              <NewsCard
+                key={`${item.link}-${idx}`}
+                item={item}
+                index={idx}
+                stale={isStale}
+                onClick={() => setSelectedItem(item)}
+              />
             ))}
           </motion.div>
         )}
       </AnimatePresence>
 
-      {/* Load More */}
+      {/* ── Load more ── */}
       {!loading && hasMore && (
-        <div className="flex justify-center mt-8">
+        <div style={{ display: 'flex', justifyContent: 'center', marginTop: 28 }}>
           <button
             onClick={() => setVisibleCount(c => c + PAGE_SIZE)}
-            className="px-6 py-2.5 text-sm font-semibold text-indigo-300 border border-indigo-500/30 rounded-xl hover:bg-indigo-500/10 hover:border-indigo-500/60 transition-all duration-200"
-          >
-            Load More
-          </button>
+            style={{ padding: '10px 24px', fontSize: 13, fontWeight: 600, color: '#818cf8', background: 'transparent', border: '1px solid rgba(99,102,241,0.3)', borderRadius: 10, cursor: 'pointer', transition: 'all 0.2s' }}
+          >Load More</button>
         </div>
+      )}
+
+      {/* ── Detail Modal ── */}
+      {selectedItem && (
+        <NewsDetailModal
+          item={selectedItem}
+          onClose={() => setSelectedItem(null)}
+          analysisCache={analysisCache}
+        />
       )}
     </section>
   );
