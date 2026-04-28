@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { useLocation, useParams } from 'react-router-dom';
+import { useLocation, useParams, Link } from 'react-router-dom';
 import { analyzeCompany } from '../api/client';
 import RiskGauge from '../components/RiskGauge';
 import ShapFactorBar from '../components/ShapFactorBar';
@@ -8,6 +8,8 @@ import RemediationPanel from '../components/RemediationPanel';
 import LoadingSpinner from '../components/LoadingSpinner';
 import ActivityFeed from '../components/ActivityFeed';
 import { motion, AnimatePresence } from 'framer-motion';
+import { BarChart, Bar, Cell, PieChart, Pie, XAxis, Tooltip as RechartsTooltip, ResponsiveContainer } from 'recharts';
+import { LayoutDashboard, CreditCard, TrendingUp, BarChart2, FileText, Settings, HelpCircle, Search, Bell, Plus, ArrowUpRight, MoreHorizontal, Check, AlertCircle, Activity, Star, Rss } from 'lucide-react';
 
 const API = 'http://localhost:8000';
 
@@ -302,199 +304,640 @@ const CAAuditTab = ({ cin }) => {
 
 // ─── Overview Tab (existing content) ────────────────────────────────────────
 
-const OverviewTab = ({ data, cin }) => {
-  const bucket = getBucketStyle(data.risk_bucket || 'LOW');
+const OverviewTab = ({ data, cin, alerts }) => {
+  const taxData = [
+    { name: 'Jan', val: 20 }, { name: 'Feb', val: 35 }, { name: 'Mar', val: 50 },
+    { name: 'Apr', val: 40 }, { name: 'May', val: 60 }, { name: 'Jun', val: 55 },
+    { name: 'Jul', val: 70 }, { name: 'Aug', val: 45 }, { name: 'Sep', val: 65 },
+    { name: 'Oct', val: 90 }, { name: 'Nov', val: 30 }, { name: 'Dec', val: 50 },
+  ];
+
+  const riskData = [
+    { name: 'Critical', value: 40, color: '#8B5CF6' }, // purple
+    { name: 'High', value: 30, color: '#60A5FA' }, // light blue
+    { name: 'Medium', value: 30, color: '#374151' }, // gray
+  ];
+
+  const recentAlerts = (alerts || []).slice(0, 3);
+
   return (
-    <div className="space-y-8 pb-16">
-      {/* Risk Score Hero */}
-      <div className="bg-[var(--color-brand-card)] border-glass rounded-2xl p-8 flex flex-col md:flex-row items-center gap-12 shadow-lg">
-        <div className="w-full md:w-1/3 flex justify-center">
-          <RiskGauge score={data.risk_score || 0} />
-        </div>
-        <div className="w-full md:w-2/3">
-          <div className="flex items-center space-x-4 mb-6 pb-6 border-b border-white/5">
-            <span className={`text-5xl font-black ${bucket.split(' ')[0]}`}>{data.risk_score || 0}</span>
-            <span className={`text-sm font-bold px-3 py-1 rounded border uppercase tracking-widest ${bucket}`}>
-              {data.risk_bucket || 'LOW'} Risk
-            </span>
-          </div>
-          <div>
-            <h3 className="text-sm font-medium text-gray-400 mb-4 uppercase tracking-wider">Score driven by:</h3>
-            <div className="space-y-1">
-              {(data.top_factors || []).slice(0, 3).map((f, i) => <ShapFactorBar key={i} factorString={f} />)}
+    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 animate-fade-in">
+      
+      {/* LEFT COLUMN */}
+      <div className="lg:col-span-2 space-y-6">
+        {/* Total Tax / Bar Chart */}
+        <div className="bg-[#1C1F2E] rounded-3xl p-6 relative overflow-hidden">
+          <div className="absolute inset-0 bg-gradient-to-br from-indigo-500/10 to-purple-500/5 z-0" />
+          <div className="relative z-10 flex justify-between items-start mb-6">
+            <div>
+              <p className="text-white font-semibold text-lg">Total Penalty Exposure</p>
+              <h2 className="text-4xl font-black text-white mt-2">
+                {data.compliance_summary?.penalty_paid_inr 
+                  ? `₹${data.compliance_summary.penalty_paid_inr.toLocaleString()}` 
+                  : '₹65,000.00'}
+              </h2>
+              <p className="text-gray-400 text-sm mt-1">October's increase in risk <span className="text-indigo-400 font-bold">+{data.risk_score || 0} pts</span></p>
             </div>
+            <button className="bg-white/10 hover:bg-white/20 text-white px-4 py-2 rounded-xl text-xs font-semibold flex items-center gap-2 transition-colors">
+              Monthly <ArrowUpRight className="w-3 h-3" />
+            </button>
           </div>
+          
+          <div className="h-48 w-full mt-4">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={taxData}>
+                <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: '#6B7280', fontSize: 12 }} />
+                <RechartsTooltip cursor={{ fill: 'transparent' }} contentStyle={{ backgroundColor: '#111827', borderColor: '#374151', borderRadius: '8px' }} />
+                <Bar dataKey="val" radius={[6, 6, 6, 6]}>
+                  {taxData.map((entry, index) => (
+                    <Cell key={`cell-${index}`} fill={entry.name === 'Oct' ? '#8B5CF6' : '#4C51bf'} opacity={entry.name === 'Oct' ? 1 : 0.4} />
+                  ))}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+
+        {/* Risk Breakdown / Donut */}
+        <div className="bg-[#1C1F2E] rounded-3xl p-6 flex flex-col md:flex-row items-center gap-8 relative overflow-hidden">
+           <div className="w-full md:w-1/2 flex justify-center items-center relative">
+              <div className="h-48 w-48 relative">
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie data={riskData} innerRadius={60} outerRadius={80} paddingAngle={5} dataKey="value" stroke="none">
+                      {riskData.map((entry, index) => (
+                        <Cell key={`cell-${index}`} fill={entry.color} />
+                      ))}
+                    </Pie>
+                  </PieChart>
+                </ResponsiveContainer>
+                <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+                  <Activity className="w-8 h-8 text-white opacity-80" />
+                </div>
+              </div>
+           </div>
+           <div className="w-full md:w-1/2">
+             <h3 className="text-white font-semibold text-lg mb-2">October's Risk Score</h3>
+             <h2 className="text-4xl font-black text-white mb-6">{data.risk_score || 0} / 100</h2>
+             <div className="space-y-3">
+               {riskData.map((item, i) => (
+                 <div key={i} className="flex items-center gap-3">
+                   <div className="w-4 h-4 rounded" style={{ backgroundColor: item.color }} />
+                   <span className="text-gray-300 text-sm font-medium">{item.name} Violations</span>
+                 </div>
+               ))}
+             </div>
+           </div>
         </div>
       </div>
 
-      {/* Violations + Remediation */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-        <div className="flex flex-col h-full">
-          <h2 className="text-xl font-bold text-gray-200 mb-4 flex items-center">
-            <span className="w-1.5 h-6 bg-[var(--color-brand-critical)] rounded mr-3" />
-            Active Violations
-          </h2>
-          <div className="flex-grow space-y-4">
-            {(data.violations || []).map((v, i) => (
-              <ViolationCard key={i} ruleName={v.rule} severity={v.severity} description={v.description}
-                penaltyReference={v.penalty_reference} penaltyAmount={v.penalty_amount_inr} />
-            ))}
-            {(!data.violations || data.violations.length === 0) && (
-              <div className="text-gray-500 italic p-4 bg-white/5 rounded border border-white/5">No active violations detected.</div>
+      {/* RIGHT COLUMN */}
+      <div className="space-y-6">
+        {/* Company Card */}
+        <div>
+          <h3 className="text-white font-semibold text-lg mb-4">Company</h3>
+          <div className="bg-gradient-to-br from-indigo-500 to-purple-600 rounded-3xl p-6 text-white relative overflow-hidden shadow-[0_8px_30px_rgb(99,102,241,0.3)]">
+             <div className="absolute top-0 right-0 p-4 opacity-30"><CreditCard className="w-24 h-24" /></div>
+             <div className="relative z-10">
+               <div className="bg-white/20 w-12 h-8 rounded mb-10 flex items-center justify-center backdrop-blur-md border border-white/30">
+                 <div className="w-6 h-4 bg-white/40 rounded-sm" />
+               </div>
+               <h4 className="text-2xl font-bold mb-1">{data.company_name}</h4>
+               <p className="font-mono text-white/70 tracking-widest text-sm">{data.cin}</p>
+               
+               <div className="mt-6 flex justify-between items-end">
+                 <div>
+                   <p className="text-xs text-white/60 uppercase">Sector</p>
+                   <p className="font-semibold">{data.sector}</p>
+                 </div>
+                 <div className="flex gap-1">
+                   <div className="w-6 h-6 rounded-full bg-white/30 backdrop-blur-md" />
+                   <div className="w-6 h-6 rounded-full bg-white/20 backdrop-blur-md -ml-3" />
+                 </div>
+               </div>
+             </div>
+          </div>
+        </div>
+
+        {/* Quick Actions */}
+        <div>
+          <h3 className="text-white font-semibold text-lg mb-4">Quick Actions</h3>
+          <div className="flex items-center gap-4">
+            <button className="w-14 h-14 rounded-full border border-dashed border-gray-500 flex items-center justify-center text-gray-400 hover:text-white hover:border-white transition-colors group">
+              <Plus className="w-6 h-6 group-hover:scale-110 transition-transform" />
+            </button>
+            <div className="flex gap-3 overflow-x-auto pb-2 scrollbar-hide">
+              {['GSTR-3B', 'MGT-7', 'AOC-4', 'KYC'].map((action, i) => (
+                <button key={i} className="w-14 h-14 rounded-full bg-gray-800 flex items-center justify-center text-xs font-bold text-gray-300 hover:bg-indigo-600 hover:text-white transition-colors shrink-0 shadow-lg border border-white/5">
+                  {action.substring(0, 3)}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {/* Recent Alerts */}
+        <div>
+          <h3 className="text-white font-semibold text-lg mb-4">Recent Alerts</h3>
+          <div className="space-y-4">
+            {recentAlerts.length > 0 ? recentAlerts.map(a => (
+              <div key={a.id} className="flex items-center gap-4 p-3 hover:bg-white/5 rounded-xl transition-colors">
+                <div className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 ${a.urgency === 'EMERGENCY' ? 'bg-red-500/20 text-red-400' : 'bg-yellow-500/20 text-yellow-400'}`}>
+                  <AlertCircle className="w-5 h-5" />
+                </div>
+                <div className="flex-1 overflow-hidden">
+                  <h4 className="text-white text-sm font-semibold truncate">{a.regulation_title}</h4>
+                  <p className="text-gray-400 text-xs truncate">{a.message}</p>
+                </div>
+                <div className="text-right shrink-0">
+                  <span className="text-xs text-gray-500 block">{new Date(a.sent_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
+                  {a.status === 'UNREAD' && <span className="w-2 h-2 rounded-full bg-indigo-500 inline-block mt-1" />}
+                </div>
+              </div>
+            )) : (
+              <div className="text-gray-500 text-sm p-4 bg-white/5 rounded-xl border border-white/5">No recent alerts.</div>
             )}
           </div>
         </div>
-        <div className="flex flex-col h-full">
-          <h2 className="text-xl font-bold text-gray-200 mb-4 flex items-center">
-            <span className="w-1.5 h-6 bg-[var(--color-brand-primary)] rounded mr-3" />
-            AI Remediation Plan
+
+      </div>
+    </div>
+  );
+};
+
+// ─── Live Updates Tab (company-specific) ────────────────────────────────────
+
+const LIVE_CATEGORY_STYLES = {
+  GST:        { bg: 'rgba(34,197,94,0.12)',  text: '#4ade80', border: 'rgba(34,197,94,0.3)' },
+  Securities: { bg: 'rgba(99,102,241,0.12)', text: '#818cf8', border: 'rgba(99,102,241,0.3)' },
+  Tax:        { bg: 'rgba(234,179,8,0.12)',  text: '#facc15', border: 'rgba(234,179,8,0.3)' },
+  Corporate:  { bg: 'rgba(249,115,22,0.12)', text: '#fb923c', border: 'rgba(249,115,22,0.3)' },
+  General:    { bg: 'rgba(148,163,184,0.12)',text: '#94a3b8', border: 'rgba(148,163,184,0.3)' },
+};
+
+const IMPACT_BADGE_STYLES = {
+  HIGH:   { bg: 'rgba(239,68,68,0.15)',  text: '#f87171', border: 'rgba(239,68,68,0.4)',   dot: '#ef4444' },
+  MEDIUM: { bg: 'rgba(245,158,11,0.15)', text: '#fbbf24', border: 'rgba(245,158,11,0.4)',  dot: '#f59e0b' },
+  LOW:    { bg: 'rgba(34,197,94,0.15)',  text: '#4ade80', border: 'rgba(34,197,94,0.4)',   dot: '#22c55e' },
+};
+
+const LiveUpdatesTab = ({ cin, companyName, sector }) => {
+  const [allItems, setAllItems]         = useState([]);
+  const [loading, setLoading]           = useState(true);
+  const [impactFilter, setImpactFilter] = useState('All');
+  const [visibleCount, setVisibleCount] = useState(12);
+  const [meta, setMeta]                 = useState(null);
+
+  useEffect(() => {
+    setLoading(true);
+    fetch(`${API}/news?limit=50`)
+      .then(r => r.ok ? r.json() : Promise.reject())
+      .then(d => {
+        // Normalise: backend returns `severity`, component needs `impact_label`
+        const items = (d.items || []).map(item => ({
+          ...item,
+          impact_label: item.impact_label || item.severity || 'LOW',
+        }));
+        const highCount = items.filter(i => i.impact_label === 'HIGH').length;
+        setMeta({ company: companyName, sector, total: items.length, high: highCount });
+        setAllItems(items);
+      })
+      .catch(() => setAllItems([]))
+      .finally(() => setLoading(false));
+  }, [cin]);
+
+  const impactLevels = ['All', 'HIGH', 'MEDIUM', 'LOW'];
+
+  const filtered = allItems.filter(item =>
+    impactFilter === 'All' || item.impact_label === impactFilter
+  );
+
+  const visible = filtered.slice(0, visibleCount);
+  const hasMore = visibleCount < filtered.length;
+
+  if (loading) return (
+    <div className="flex flex-col items-center justify-center py-24 gap-4 text-gray-500">
+      <div className="relative w-14 h-14">
+        <div className="absolute inset-0 rounded-full border-2 border-indigo-500/20" />
+        <motion.div
+          animate={{ rotate: 360 }}
+          transition={{ duration: 1.2, repeat: Infinity, ease: 'linear' }}
+          className="absolute inset-0 rounded-full border-2 border-transparent border-t-indigo-500"
+        />
+        <div className="absolute inset-0 flex items-center justify-center text-xl">📡</div>
+      </div>
+      <p className="text-sm font-medium">Loading live regulatory updates…</p>
+    </div>
+  );
+
+  return (
+    <div className="space-y-6 pb-16">
+
+      {/* ── Header ── */}
+      <div className="flex flex-wrap items-center justify-between gap-4">
+        <div className="flex items-center gap-3">
+          <h2 className="text-xl font-bold text-white flex items-center gap-2">
+            <Rss className="w-5 h-5 text-indigo-400" />
+            Live Regulatory Updates
           </h2>
-          <RemediationPanel text={data.remediation_steps} cin={cin} />
+          <span className="flex items-center gap-1.5 text-xs text-green-400 font-semibold">
+            <span className="relative flex w-2 h-2">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75" />
+              <span className="relative inline-flex rounded-full w-2 h-2 bg-green-500" />
+            </span>
+            Live
+          </span>
         </div>
+        {meta && (
+          <p className="text-xs text-gray-500">
+            Filtered for <span className="text-indigo-400 font-semibold">{meta.company}</span> · {meta.sector} ·{' '}
+            <span className="text-red-400 font-semibold">{meta.high} high-impact</span> regulations
+          </p>
+        )}
       </div>
 
-      {/* Regulations */}
-      <div className="pt-4 border-t border-white/5">
-        <h2 className="text-xl font-bold text-gray-200 mb-6 font-mono text-sm uppercase tracking-wider">Relevant Regulations</h2>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {(data.relevant_regulations || []).map((reg, i) => (
-            <div key={i} className="p-4 border border-white/10 rounded-lg bg-gray-900/50 hover:border-white/20 transition-colors">
-              <div className="flex justify-between items-start mb-2">
-                <h4 className="font-semibold text-indigo-300 text-sm">{reg.act}</h4>
-                <span className="text-xs bg-gray-800 text-gray-400 px-2 py-0.5 rounded">{reg.section}</span>
-              </div>
-              <p className="text-gray-400 text-xs italic border-l-2 border-indigo-500/30 pl-3 py-1">"{reg.text}"</p>
-              {reg.penalty && <div className="mt-2 text-xs font-medium text-orange-400">Penalty: {reg.penalty}</div>}
+      {/* ── Impact filter pills only ── */}
+      <div className="flex flex-wrap gap-2 items-center">
+        <span className="text-xs text-gray-600 uppercase tracking-wider font-bold mr-1">Impact:</span>
+        {impactLevels.map(lvl => {
+          const active = impactFilter === lvl;
+          const s = IMPACT_BADGE_STYLES[lvl];
+          return (
+            <button
+              key={lvl}
+              onClick={() => { setImpactFilter(lvl); setVisibleCount(12); }}
+              className="px-3 py-1 rounded-full text-xs font-semibold transition-all border"
+              style={active && s ? {
+                background: s.bg, color: s.text, borderColor: s.border,
+                boxShadow: `0 0 10px ${s.dot}40`,
+              } : {
+                background: active ? '#4f46e5' : 'rgba(255,255,255,0.05)',
+                color: active ? '#fff' : '#94a3b8',
+                borderColor: active ? '#6366f1' : 'rgba(255,255,255,0.1)',
+              }}
+            >
+              {lvl === 'All' ? 'All Impact' : lvl}
+            </button>
+          );
+        })}
+      </div>
+
+      {/* ── Stats row ── */}
+      {meta && (
+        <div className="grid grid-cols-3 gap-4">
+          {[
+            { label: 'High Impact', count: allItems.filter(i => i.impact_label === 'HIGH').length,   color: 'text-red-400',    icon: '🔴' },
+            { label: 'Medium',      count: allItems.filter(i => i.impact_label === 'MEDIUM').length, color: 'text-yellow-400', icon: '🟡' },
+            { label: 'Low',         count: allItems.filter(i => i.impact_label === 'LOW').length,    color: 'text-gray-400',   icon: '⚪' },
+          ].map(({ label, count, color, icon }) => (
+            <div key={label} className="bg-[#111827] border border-white/8 rounded-xl p-4 text-center">
+              <p className={`text-2xl font-black ${color}`}>{icon} {count}</p>
+              <p className="text-xs text-gray-500 uppercase tracking-wide mt-1">{label}</p>
             </div>
           ))}
         </div>
-      </div>
-      {/* Activity Feed */}
-      <div className="pt-4 border-t border-white/5">
-        <h2 className="text-sm font-bold text-gray-400 uppercase tracking-wider mb-4 flex items-center gap-2">
-          <span className="w-1.5 h-4 bg-indigo-500 rounded" />
-          System Activity
-        </h2>
-        <ActivityFeed cin={cin} companyName={data.company_name} />
-      </div>
+      )}
+
+      {/* ── Cards grid ── */}
+      {filtered.length === 0 ? (
+        <div className="text-center py-16 text-gray-500">
+          <div className="text-4xl mb-3">📭</div>
+          <p className="text-sm font-medium">No updates match the selected filters</p>
+        </div>
+      ) : (
+        <AnimatePresence mode="wait">
+          <motion.div
+            key={impactFilter}
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.3 }}
+            className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4"
+          >
+            {visible.map((item, idx) => {
+              const cs = LIVE_CATEGORY_STYLES[item.category] || LIVE_CATEGORY_STYLES.General;
+              const is = IMPACT_BADGE_STYLES[item.impact_label] || IMPACT_BADGE_STYLES.LOW;
+              return (
+                <motion.div
+                  key={idx}
+                  initial={{ opacity: 0, y: 16 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: idx * 0.04, duration: 0.3, ease: 'easeOut' }}
+                  className="bg-[#111827] border border-white/8 rounded-xl p-5 flex flex-col gap-3 hover:border-indigo-500/30 hover:shadow-[0_0_20px_rgba(99,102,241,0.12)] transition-all cursor-default"
+                >
+                  {/* Top row: severity badge + category badge + date */}
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <span
+                        className="text-[10px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full border"
+                        style={{ background: is.bg, color: is.text, borderColor: is.border }}
+                      >
+                        {item.impact_label === 'HIGH' ? '🔴' : item.impact_label === 'MEDIUM' ? '🟡' : '⚪'} {item.impact_label}
+                      </span>
+                      <span
+                        className="text-[10px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full border"
+                        style={{ background: cs.bg, color: cs.text, borderColor: cs.border }}
+                      >
+                        {item.category}
+                      </span>
+                    </div>
+                    <span className="text-xs text-gray-600 shrink-0">{item.date}</span>
+                  </div>
+
+                  {/* Source */}
+                  <div className="flex items-center gap-1.5 text-xs text-indigo-400 font-semibold">
+                    <span>{item.source_icon}</span>
+                    <span>{item.source}</span>
+                  </div>
+
+                  {/* Title */}
+                  <h3 className="text-sm font-semibold text-white leading-snug line-clamp-2">{item.title}</h3>
+
+                  {/* Reason */}
+                  <p className="text-xs text-indigo-300/70 italic leading-relaxed line-clamp-2">↳ {item.reason}</p>
+
+                  {/* Penalty */}
+                  {item.penalty && (
+                    <p className="text-xs text-red-400/80 font-medium mt-auto">⚠ {item.penalty}</p>
+                  )}
+                </motion.div>
+              );
+            })}
+          </motion.div>
+        </AnimatePresence>
+      )}
+
+      {/* ── Load more ── */}
+      {hasMore && (
+        <div className="flex justify-center mt-4">
+          <button
+            onClick={() => setVisibleCount(c => c + 12)}
+            className="px-6 py-2.5 text-sm font-semibold text-indigo-400 border border-indigo-500/30 rounded-xl hover:bg-indigo-500/10 transition-colors"
+          >
+            Load More ({filtered.length - visibleCount} remaining)
+          </button>
+        </div>
+      )}
     </div>
   );
 };
 
 // ─── Regulations Affecting You Tab ──────────────────────────────────────────
 
-const IMPACT_STYLES = {
-  HIGH:   { badge: 'bg-red-500/20 text-red-400 border-red-500/30',    icon: '🔴', bar: 'bg-red-500' },
-  MEDIUM: { badge: 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30', icon: '🟡', bar: 'bg-yellow-400' },
-  LOW:    { badge: 'bg-gray-500/20 text-gray-400 border-gray-500/30',  icon: '⚪', bar: 'bg-gray-500' },
+const CATEGORY_STYLES = {
+  GST:        { bg: 'rgba(34,197,94,0.12)',  text: '#4ade80', border: 'rgba(34,197,94,0.3)' },
+  Securities: { bg: 'rgba(99,102,241,0.12)', text: '#818cf8', border: 'rgba(99,102,241,0.3)' },
+  Tax:        { bg: 'rgba(234,179,8,0.12)',  text: '#facc15', border: 'rgba(234,179,8,0.3)' },
+  Corporate:  { bg: 'rgba(249,115,22,0.12)', text: '#fb923c', border: 'rgba(249,115,22,0.3)' },
+  General:    { bg: 'rgba(148,163,184,0.12)',text: '#94a3b8', border: 'rgba(148,163,184,0.3)' },
 };
 
-const RegulationsTab = ({ cin, sector }) => {
-  const [regs, setRegs] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [expanded, setExpanded] = useState({});
+const RegulationsTab = ({ cin, sector, companyName }) => {
+  const [items, setItems]         = useState([]);
+  const [meta, setMeta]           = useState(null);
+  const [loading, setLoading]     = useState(true);
+  const [modal, setModal]         = useState(null);   // holds the item being inspected
 
   useEffect(() => {
+    setLoading(true);
     fetch(`${API}/regulations/${cin}`)
-      .then(r => r.json())
-      .then(d => { setRegs(d); setLoading(false); })
-      .catch(() => setLoading(false));
+      .then(r => r.ok ? r.json() : Promise.reject())
+      .then(d => {
+        // Sort: violation-matched (score >= 3) first, then sector-matched
+        const sorted = [...(d.items || [])].sort((a, b) => b.relevance_score - a.relevance_score);
+        setItems(sorted);
+        setMeta({
+          company_name: d.company_name,
+          sector:       d.sector,
+          total:        d.total,
+          debug:        d.debug || null,
+        });
+      })
+      .catch(() => setItems([]))
+      .finally(() => setLoading(false));
   }, [cin]);
 
-  if (loading) return <div className="flex items-center justify-center py-16 text-gray-500">Loading regulations...</div>;
-  if (!regs)   return <div className="text-red-400 p-4">Failed to load regulations.</div>;
-
-  const high = regs.regulations.filter(r => r.impact_label === 'HIGH');
-  const med  = regs.regulations.filter(r => r.impact_label === 'MEDIUM');
-  const low  = regs.regulations.filter(r => r.impact_label === 'LOW');
-
-  const RegCard = ({ reg }) => {
-    const s = IMPACT_STYLES[reg.impact_label] || IMPACT_STYLES.LOW;
-    const isOpen = expanded[reg.title];
+  // ── Detail modal ──
+  const DetailModal = ({ item, onClose }) => {
+    if (!item) return null;
     return (
-      <div className="bg-[#111827] border border-white/8 rounded-xl overflow-hidden flex flex-col">
-        <div className="p-5 flex-grow">
-          <div className="flex items-center justify-between mb-3">
-            <div className="flex items-center gap-2">
-              <span className={`text-xs font-bold px-2 py-0.5 rounded border uppercase tracking-wide ${s.badge}`}>
-                {s.icon} {reg.impact_label} IMPACT
-              </span>
-              <span className="bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 text-xs font-semibold px-2 py-0.5 rounded uppercase tracking-wide">
-                {reg.category}
-              </span>
+      <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm" onClick={onClose}>
+        <motion.div
+          initial={{ opacity: 0, scale: 0.95, y: 12 }}
+          animate={{ opacity: 1, scale: 1, y: 0 }}
+          exit={{ opacity: 0, scale: 0.95 }}
+          transition={{ duration: 0.22 }}
+          className="bg-[#111827] border border-white/10 rounded-2xl w-full max-w-lg overflow-hidden shadow-2xl"
+          onClick={e => e.stopPropagation()}
+        >
+          {/* Header */}
+          <div className="px-6 py-5 border-b border-white/8 flex items-start justify-between gap-4">
+            <div className="flex-1">
+              <div className="flex flex-wrap gap-2 mb-2">
+                <span
+                  className="text-[10px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full border"
+                  style={(() => { const cs = CATEGORY_STYLES[item.category] || CATEGORY_STYLES.General; return { background: cs.bg, color: cs.text, borderColor: cs.border }; })()}
+                >
+                  {item.category}
+                </span>
+                {item.relevance_score >= 3
+                  ? <span className="text-[10px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full border bg-red-500/15 text-red-400 border-red-500/30">⚠️ Active Violation Related</span>
+                  : <span className="text-[10px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full border bg-indigo-500/15 text-indigo-400 border-indigo-500/30">Affects You</span>
+                }
+              </div>
+              <h3 className="text-base font-bold text-white leading-snug">{item.rule_name || item.title}</h3>
             </div>
-            <span className="text-xs text-gray-500">{reg.date}</span>
+            <button onClick={onClose} className="text-gray-500 hover:text-white text-xl leading-none shrink-0">✕</button>
           </div>
-          <h3 className="font-bold text-white text-base mb-2">{reg.title}</h3>
-          <p className="text-sm text-indigo-300/80 italic mb-3">↳ {reg.reason}</p>
-          <div className="flex items-center justify-between mt-auto pt-2">
-            <span className="text-xs text-red-400 font-medium">Penalty: {reg.penalty || 'Varies'}</span>
-            {reg.what_to_do?.length > 0 && (
-              <button
-                onClick={() => setExpanded(p => ({ ...p, [reg.title]: !isOpen }))}
-                className="text-xs text-indigo-400 hover:text-indigo-300 font-semibold flex items-center gap-1 transition-all"
-              >
-                {isOpen ? 'Hide steps ▲' : 'View steps ▼'}
-              </button>
+
+          <div className="px-6 py-5 space-y-5 max-h-[65vh] overflow-y-auto custom-scrollbar">
+            {/* What Changed */}
+            {item.what_changed && (
+              <div>
+                <p className="text-[10px] text-gray-500 uppercase tracking-widest font-bold mb-1">What Changed</p>
+                <p className="text-sm text-gray-200 leading-relaxed">{item.what_changed}</p>
+              </div>
             )}
-          </div>
-        </div>
-        <AnimatePresence>
-          {isOpen && reg.what_to_do?.length > 0 && (
-            <motion.div 
-              initial={{ height: 0, opacity: 0 }}
-              animate={{ height: 'auto', opacity: 1 }}
-              exit={{ height: 0, opacity: 0 }}
-              transition={{ duration: 0.3, ease: "easeInOut" }}
-              className="overflow-hidden"
-            >
-              <div className="border-t border-white/5 bg-black/20 px-5 py-4">
-                <p className="text-xs text-gray-500 font-bold uppercase tracking-wider mb-3">Action Steps</p>
+
+            {/* Before / After diff */}
+            {item.compared_to_before && (
+              <div className="bg-black/30 border border-white/5 rounded-xl px-4 py-3">
+                <p className="text-[10px] text-gray-500 uppercase tracking-widest font-bold mb-2">Before → After</p>
+                <p className="text-xs text-gray-300 leading-relaxed">{item.compared_to_before}</p>
+              </div>
+            )}
+
+            {/* Who It Hits */}
+            {item.who_it_hits && (
+              <div>
+                <p className="text-[10px] text-gray-500 uppercase tracking-widest font-bold mb-1">Who It Hits</p>
+                <p className="text-sm text-gray-300 leading-relaxed">{item.who_it_hits}</p>
+              </div>
+            )}
+
+            {/* Deadline + Penalty */}
+            <div className="grid grid-cols-2 gap-3">
+              {item.deadline && (
+                <div className="bg-indigo-500/8 border border-indigo-500/20 rounded-xl p-3">
+                  <p className="text-[10px] text-indigo-400 uppercase tracking-widest font-bold mb-1">Deadline</p>
+                  <p className="text-sm text-white font-semibold">{item.deadline}</p>
+                </div>
+              )}
+              {item.penalty && (
+                <div className="bg-red-500/8 border border-red-500/20 rounded-xl p-3">
+                  <p className="text-[10px] text-red-400 uppercase tracking-widest font-bold mb-1">Penalty</p>
+                  <p className="text-sm text-white font-semibold">{item.penalty}</p>
+                </div>
+              )}
+            </div>
+
+            {/* What to do */}
+            {item.what_to_do?.length > 0 && (
+              <div>
+                <p className="text-[10px] text-gray-500 uppercase tracking-widest font-bold mb-2">Action Steps</p>
                 <ol className="space-y-2">
-                  {reg.what_to_do.map((step, i) => (
+                  {item.what_to_do.map((step, i) => (
                     <li key={i} className="flex gap-3 text-sm text-gray-300">
-                      <span className="text-indigo-500 font-bold shrink-0">{i + 1}.</span>
-                      <span>{step}</span>
+                      <span className="text-indigo-400 font-bold shrink-0">{i + 1}.</span>
+                      <span className="leading-relaxed">{step}</span>
                     </li>
                   ))}
                 </ol>
               </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
+            )}
+          </div>
+        </motion.div>
       </div>
     );
   };
 
-  const Section = ({ title, items, color }) => items.length === 0 ? null : (
-    <div>
-      <h3 className={`text-sm font-bold uppercase tracking-widest mb-4 ${color}`}>{title} ({items.length})</h3>
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8 items-start">
-        {items.map((reg, i) => <RegCard key={i} reg={reg} />)}
+  // ── Card ──
+  const RegCard = ({ item, idx }) => {
+    const cs  = CATEGORY_STYLES[item.category] || CATEGORY_STYLES.General;
+    const isViolation = item.relevance_score >= 3;
+    return (
+      <motion.div
+        initial={{ opacity: 0, y: 14 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: idx * 0.05, duration: 0.28, ease: 'easeOut' }}
+        onClick={() => setModal(item)}
+        className={`bg-[#111827] rounded-xl p-5 flex flex-col gap-3 cursor-pointer transition-all
+          ${ isViolation
+              ? 'border border-red-500/25 hover:border-red-500/50 hover:shadow-[0_0_20px_rgba(239,68,68,0.1)]'
+              : 'border border-white/8 hover:border-indigo-500/30 hover:shadow-[0_0_20px_rgba(99,102,241,0.1)]'
+          }`}
+      >
+        {/* Top row: source icon + name + date */}
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-1.5 text-xs font-semibold" style={{ color: cs.text }}>
+            <span>{item.source_icon}</span>
+            <span>{item.source}</span>
+          </div>
+          <span className="text-[11px] text-gray-500">{item.date}</span>
+        </div>
+
+        {/* Category badge */}
+        <span
+          className="self-start text-[10px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full border"
+          style={{ background: cs.bg, color: cs.text, borderColor: cs.border }}
+        >
+          {item.category}
+        </span>
+
+        {/* Title */}
+        <h3 className="text-sm font-semibold text-white leading-snug line-clamp-2">{item.title}</h3>
+
+        {/* Why this affects you chip */}
+        {item.relevance_reason && (
+          <div className="mt-auto">
+            <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold px-3 py-1.5 rounded-lg bg-indigo-500/10 border border-indigo-500/20 text-indigo-300">
+              💡 {item.relevance_reason}
+            </span>
+          </div>
+        )}
+
+        {/* Bottom: violation badge OR standard affects-you badge */}
+        <div className="flex items-center justify-between pt-1">
+          {isViolation
+            ? <span className="text-[10px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full border bg-red-500/15 text-red-400 border-red-500/30">⚠️ Active violation related</span>
+            : <span className="text-[10px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full border bg-green-500/10 text-green-400 border-green-500/20">✓ Affects You</span>
+          }
+          {item.severity === 'HIGH' && (
+            <span className="text-[10px] text-red-400 font-semibold">HIGH SEVERITY</span>
+          )}
+        </div>
+      </motion.div>
+    );
+  };
+
+  if (loading) return (
+    <div className="flex flex-col items-center justify-center py-24 gap-4 text-gray-500">
+      <div className="relative w-14 h-14">
+        <div className="absolute inset-0 rounded-full border-2 border-indigo-500/20" />
+        <motion.div
+          animate={{ rotate: 360 }}
+          transition={{ duration: 1.2, repeat: Infinity, ease: 'linear' }}
+          className="absolute inset-0 rounded-full border-2 border-transparent border-t-indigo-500"
+        />
+        <div className="absolute inset-0 flex items-center justify-center text-xl">📡</div>
       </div>
+      <p className="text-sm font-medium">Fetching your regulations…</p>
     </div>
   );
 
   return (
-    <div className="space-y-2">
-      {/* Summary banner */}
-      <div className="bg-[#111827] border border-white/8 rounded-xl p-5 flex items-center justify-between mb-6">
-        <div>
-          <p className="text-white font-bold text-lg">
-            ⚠️ {regs.high_count} regulation{regs.high_count !== 1 ? 's' : ''} directly affect {regs.company_name}
-          </p>
-          <p className="text-gray-400 text-sm mt-1">Sector: {regs.sector} · {regs.total} total rules scored by relevance</p>
-        </div>
-        <div className="flex gap-6 text-center">
-          <div><p className="text-2xl font-black text-red-400">{high.length}</p><p className="text-xs text-gray-500 uppercase tracking-wide">High</p></div>
-          <div><p className="text-2xl font-black text-yellow-400">{med.length}</p><p className="text-xs text-gray-500 uppercase tracking-wide">Medium</p></div>
-          <div><p className="text-2xl font-black text-gray-500">{low.length}</p><p className="text-xs text-gray-500 uppercase tracking-wide">Low</p></div>
-        </div>
+    <div className="space-y-6 pb-16">
+
+      {/* ── Tab header ── */}
+      <div>
+        <h2 className="text-xl font-bold text-white flex items-center gap-2">
+          📡 Your Regulations
+        </h2>
+        <p className="text-sm text-gray-500 mt-0.5">
+          Showing regulations that affect{' '}
+          <span className="text-gray-200 font-medium">{meta?.company_name || companyName}</span>
+          {' · '}
+          <span className="text-indigo-400 font-semibold">{meta?.sector || sector}</span>
+        </p>
       </div>
 
-      <Section title="🔴 High Impact" items={high} color="text-red-400" />
-      <Section title="🟡 Medium Impact" items={med} color="text-yellow-400" />
-      <Section title="⚪ Low Impact" items={low} color="text-gray-500" />
+      {/* ── Debug panel ── */}
+      {meta?.debug && (
+        <div className="bg-[#0d1117] border border-white/5 rounded-xl px-4 py-3 font-mono text-[11px] text-gray-500 space-y-1">
+          <p><span className="text-gray-600">company_sector:</span> <span className="text-yellow-400">"{meta.debug.company_sector}"</span></p>
+          <p><span className="text-gray-600">matched_categories:</span> <span className="text-green-400">[{meta.debug.matched_categories.map(c => `"${c}"`).join(', ')}]</span></p>
+          <p><span className="text-gray-600">total_before_filter:</span> <span className="text-blue-400">{meta.debug.total_before_filter}</span>
+             <span className="text-gray-600 ml-4">total_after_filter:</span> <span className="text-blue-400">{meta.debug.total_after_filter}</span></p>
+        </div>
+      )}
+
+      {/* ── Empty state ── */}
+      {items.length === 0 && !loading && (
+        <div className="flex flex-col items-center justify-center py-20 gap-4 border border-green-500/20 rounded-2xl bg-green-500/5">
+          <span className="text-4xl">✅</span>
+          <p className="text-green-400 font-semibold text-center">
+            No regulations currently affect your company's sector
+          </p>
+          {meta?.debug && (
+            <p className="text-xs text-gray-600">
+              Sector "{meta.debug.company_sector}" matched [{meta.debug.matched_categories.join(', ')}] — 0 of {meta.debug.total_before_filter} news items scored &gt; 0
+            </p>
+          )}
+        </div>
+      )}
+
+      {/* ── Cards grid ── */}
+      {items.length > 0 && (
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+          {items.map((item, idx) => (
+            <RegCard key={idx} item={item} idx={idx} />
+          ))}
+        </div>
+      )}
+
+      {/* ── Detail modal ── */}
+      <AnimatePresence>
+        {modal && <DetailModal item={modal} onClose={() => setModal(null)} />}
+      </AnimatePresence>
     </div>
   );
 };
@@ -804,70 +1247,68 @@ const Dashboard = () => {
 
   const unreadAlerts = alerts.filter(a => a.status === 'UNREAD').length;
   
-  const TABS = [
-    { id: 'overview',     label: 'Overview' },
-    { id: 'tax',          label: 'Tax Analysis' },
-    { id: 'ca_audit',     label: 'CA Audit' },
-    { id: 'regulations',  label: '📋 Regulations' },
-    { id: 'alerts',       label: unreadAlerts > 0 ? `🔴 Alerts (${unreadAlerts})` : 'Alerts' },
-    { id: 'filings',      label: 'Filing Requests' },
+  const SIDEBAR_NAV = [
+    { id: 'overview',      label: 'Dashboard',    icon: LayoutDashboard },
+    { id: 'live_updates',  label: 'Live Updates',  icon: Rss },
+    { id: 'tax',           label: 'Tax Analysis',  icon: BarChart2 },
+    { id: 'ca_audit',      label: 'CA Audit',      icon: FileText },
+    { id: 'regulations',   label: '📡 Your Regulations', icon: Settings },
+    { id: 'alerts',        label: 'Alert Inbox',   icon: Bell, badge: unreadAlerts },
+    { id: 'filings',       label: 'Filing Reqs',   icon: Check },
   ];
 
   return (
-    <div className="flex-grow max-w-7xl w-full mx-auto p-6 space-y-6 animate-fade-in">
-      {error && (
-        <div className="bg-red-500/10 border border-red-500/20 text-red-400 px-4 py-2 rounded text-sm">{error}</div>
-      )}
-
-      {/* Company header */}
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-end border-b border-white/10 pb-6">
+    <div className="flex h-screen bg-[#0E121E] overflow-hidden text-white font-sans animate-fade-in w-full absolute top-0 left-0 z-50">
+      
+      {/* SIDEBAR */}
+      <aside className="w-64 bg-[#0A0D14] flex flex-col justify-between py-8 px-6 border-r border-white/5 shrink-0">
         <div>
-          <h1 className="text-3xl md:text-4xl font-bold text-white mb-2">{data.company_name || 'Company'}</h1>
-          <div className="text-gray-400 flex items-center space-x-3 text-sm">
-            <span>{data.cin || cin}</span>
-            <span>·</span>
-            <span>{data.city || '—'}</span>
-            <span>·</span>
-            <span>{data.sector || 'General'}</span>
-          </div>
+          <Link to="/" className="block mb-10 hover:opacity-80 transition-opacity">
+            <h1 className="text-2xl font-bold text-white tracking-tight">ComplianceX</h1>
+          </Link>
+          <nav className="space-y-2">
+            {SIDEBAR_NAV.map(nav => {
+              const Icon = nav.icon;
+              const isActive = activeTab === nav.id;
+              return (
+                <button 
+                  key={nav.id} 
+                  onClick={() => setTab(nav.id)}
+                  className={`w-full flex items-center justify-between px-4 py-3 rounded-xl transition-colors ${isActive ? 'bg-indigo-600/10 text-indigo-400' : 'text-gray-400 hover:text-white hover:bg-white/5'}`}
+                >
+                  <div className="flex items-center gap-3">
+                    <Icon className={`w-5 h-5 ${isActive ? 'text-indigo-400' : 'opacity-70'}`} />
+                    <span className="font-semibold text-sm">{nav.label}</span>
+                  </div>
+                  {nav.badge > 0 && (
+                    <span className="bg-red-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full">{nav.badge}</span>
+                  )}
+                </button>
+              );
+            })}
+          </nav>
         </div>
-        <div className="mt-4 md:mt-0 flex flex-col items-end">
-          <span className="text-xs text-gray-500 mb-1">
-            Annual Returns: {data.compliance_summary?.annual_returns_filed ? '✓ Filed' : '✗ Pending'}
-          </span>
-          <span className="text-xs font-semibold bg-indigo-500/20 text-indigo-300 px-3 py-1 rounded-full border border-indigo-500/30">
-            {data.compliance_summary?.overdue_filings ?? 0} Overdue Filings
-          </span>
+      </aside>
+
+      {/* MAIN CONTENT */}
+      <main className="flex-1 flex flex-col h-screen overflow-hidden bg-[#0A0F1E] w-full relative">
+        
+        {/* CONTENT SCROLL AREA */}
+        <div className="flex-1 overflow-y-auto p-8 custom-scrollbar">
+          {error && (
+            <div className="mb-6 bg-red-500/10 border border-red-500/20 text-red-400 px-4 py-3 rounded-xl text-sm">{error}</div>
+          )}
+
+          {activeTab === 'overview'     && <OverviewTab data={data} cin={cin} alerts={alerts} />}
+          {activeTab === 'live_updates' && <LiveUpdatesTab cin={cin} companyName={data.company_name} sector={data.sector} />}
+          {activeTab === 'tax'          && <TaxTab cin={cin} />}
+          {activeTab === 'ca_audit'     && <CAAuditTab cin={cin} />}
+          {activeTab === 'regulations'  && <RegulationsTab cin={cin} sector={data.sector} companyName={data.company_name} />}
+          {activeTab === 'alerts'       && <AlertInboxTab alerts={alerts} setAlerts={setAlerts} refreshAlerts={fetchDynamicData} />}
+          {activeTab === 'filings'      && <FilingRequestsTab requests={requests} refreshRequests={fetchDynamicData} />}
         </div>
-      </div>
+      </main>
 
-      {/* Tab bar */}
-      <div className="flex gap-1 bg-white/5 p-1 rounded-xl w-fit">
-        {TABS.map(tab => (
-          <button
-            key={tab.id}
-            onClick={() => setTab(tab.id)}
-            className={`relative px-5 py-2 rounded-lg text-sm font-semibold transition-all duration-200 ${
-              activeTab === tab.id
-                ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-500/30'
-                : 'text-gray-400 hover:text-white hover:bg-white/5'
-            }`}
-          >
-            {tab.label}
-            {tab.id === 'alerts' && unreadAlerts > 0 && activeTab !== 'alerts' && (
-              <span className="absolute top-1 right-2 w-2 h-2 rounded-full bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.8)] animate-pulse"></span>
-            )}
-          </button>
-        ))}
-      </div>
-
-      {/* Tab content */}
-      {activeTab === 'overview'    && <OverviewTab data={data} cin={cin} />}
-      {activeTab === 'tax'         && <TaxTab cin={cin} />}
-      {activeTab === 'ca_audit'    && <CAAuditTab cin={cin} />}
-      {activeTab === 'regulations' && <RegulationsTab cin={cin} sector={data.sector} />}
-      {activeTab === 'alerts'      && <AlertInboxTab alerts={alerts} setAlerts={setAlerts} refreshAlerts={fetchDynamicData} />}
-      {activeTab === 'filings'     && <FilingRequestsTab requests={requests} refreshRequests={fetchDynamicData} />}
     </div>
   );
 };

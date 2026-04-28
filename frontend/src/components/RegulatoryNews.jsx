@@ -19,6 +19,32 @@ const SEVERITY_COLORS = {
   LOW:    { bg: 'rgba(34,197,94,0.15)',   text: '#22c55e', border: 'rgba(34,197,94,0.4)' },
 };
 
+// ─── Company-type tag mapping ─────────────────────────────────────────────────
+const CATEGORY_TAGS = {
+  GST:        ['Manufacturing', 'Retail', 'Healthcare', 'Real Estate', 'EdTech'],
+  Corporate:  ['All Companies', 'Private Ltd', 'OPC', 'Listed Companies'],
+  Tax:        ['All Companies', 'NBFC', 'IT Services', 'Large Businesses'],
+  Securities: ['Listed Companies', 'NBFC', 'Brokers', 'Investors'],
+};
+
+/** Derive a deduplicated tag list from category + who_it_hits. */
+const getItemTags = (item) => {
+  const base = CATEGORY_TAGS[item.category] || [];
+  const extra = [];
+  const hits  = (item.who_it_hits || '').toLowerCase();
+  if (hits.includes('turnover above') && hits.includes('5'))  extra.push('Turnover >₹5Cr');
+  if (hits.includes('listed'))    extra.push('Listed Co.');
+  if (hits.includes('nbfc'))      extra.push('NBFC');
+  if (hits.includes('small'))     extra.push('Small Co.');
+  if (hits.includes('director'))  extra.push('Directors');
+  if (hits.includes('all'))       extra.push('All Companies');
+  // Merge, deduplicate, preserve base order
+  const seen = new Set(base);
+  const merged = [...base];
+  for (const t of extra) { if (!seen.has(t)) { seen.add(t); merged.push(t); } }
+  return merged;
+};
+
 // ─── Skeleton ────────────────────────────────────────────────────────────────
 const SkeletonCard = () => (
   <div style={{ background: '#111827', border: '1px solid rgba(255,255,255,0.05)', borderRadius: 12, padding: 20 }} className="animate-pulse space-y-3">
@@ -46,9 +72,18 @@ const StaleBanner = ({ category, date }) => (
 );
 
 // ─── News Card ────────────────────────────────────────────────────────────────
-const NewsCard = ({ item, index, stale, onClick }) => {
+const NewsCard = ({ item, index, stale, onClick, activeFilter }) => {
   const cat = item.category || 'General';
-  const cs = CATEGORY_STYLES[cat] || CATEGORY_STYLES.General;
+  const cs  = CATEGORY_STYLES[cat] || CATEGORY_STYLES.General;
+
+  // Build tags and cap at 3 visible
+  const allTags    = getItemTags(item);
+  const visibleTags = allTags.slice(0, 3);
+  const overflowCount = allTags.length - visibleTags.length;
+
+  // A tag is "active" if its category matches the active filter pill
+  const isFilterActive = activeFilter && activeFilter !== 'All';
+  const activeCatTags  = isFilterActive ? (CATEGORY_TAGS[activeFilter] || []) : [];
 
   return (
     <motion.div
@@ -60,10 +95,12 @@ const NewsCard = ({ item, index, stale, onClick }) => {
         background: '#111827',
         border: `1px ${stale ? 'dashed' : 'solid'} ${stale ? 'rgba(255,255,255,0.18)' : 'rgba(255,255,255,0.05)'}`,
         borderRadius: 12, padding: 20, cursor: 'pointer',
+        display: 'flex', flexDirection: 'column', gap: 0,
         transition: 'all 0.25s ease',
       }}
       whileHover={{ y: -4, boxShadow: '0 0 20px rgba(99,102,241,0.18)' }}
     >
+      {/* Source + Category badge */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12, gap: 8 }}>
         <span style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 600, color: '#818cf8' }}>
           <span style={{ fontSize: 15 }}>{item.source_icon}</span>{item.source}
@@ -71,13 +108,46 @@ const NewsCard = ({ item, index, stale, onClick }) => {
         <span style={{
           fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em',
           padding: '2px 8px', borderRadius: 99, border: `1px solid ${cs.border}`,
-          background: cs.bg, color: cs.text,
+          background: cs.bg, color: cs.text, whiteSpace: 'nowrap',
         }}>{cat}</span>
       </div>
-      <p style={{ fontSize: 13, fontWeight: 500, color: '#f1f5f9', lineHeight: 1.5, marginBottom: 12, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
+
+      {/* Title */}
+      <p style={{ fontSize: 13, fontWeight: 500, color: '#f1f5f9', lineHeight: 1.5, marginBottom: 14, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden', flexGrow: 1 }}>
         {item.title}
       </p>
-      <p style={{ fontSize: 11, color: '#64748b' }}>{item.date}</p>
+
+      {/* Company-type tags */}
+      {allTags.length > 0 && (
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, marginBottom: 10 }}>
+          {visibleTags.map(tag => {
+            const highlighted = isFilterActive && activeCatTags.includes(tag);
+            return (
+              <span key={tag} style={{
+                fontSize: 10, padding: '2px 8px', borderRadius: 99,
+                background: highlighted ? 'rgba(99,102,241,0.18)' : '#1E2433',
+                border: `1px solid ${highlighted ? 'rgba(99,102,241,0.5)' : '#2D3748'}`,
+                color: highlighted ? '#a5b4fc' : '#94A3B8',
+                fontWeight: highlighted ? 600 : 400,
+                transition: 'all 0.2s',
+              }}>
+                {tag}
+              </span>
+            );
+          })}
+          {overflowCount > 0 && (
+            <span style={{
+              fontSize: 10, padding: '2px 8px', borderRadius: 99,
+              background: '#1E2433', border: '1px solid #2D3748', color: '#64748b',
+            }}>
+              +{overflowCount} more
+            </span>
+          )}
+        </div>
+      )}
+
+      {/* Date */}
+      <p style={{ fontSize: 11, color: '#64748b', marginTop: 0 }}>{item.date}</p>
     </motion.div>
   );
 };
@@ -199,6 +269,25 @@ const NewsDetailModal = ({ item, onClose, analysisCache }) => {
               >✕</button>
             </div>
           </div>
+
+          {/* ── Company-type tags ── */}
+          {(() => {
+            const tags = getItemTags(item);
+            if (!tags.length) return null;
+            return (
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 20 }}>
+                {tags.map(tag => (
+                  <span key={tag} style={{
+                    fontSize: 11, padding: '3px 10px', borderRadius: 99,
+                    background: '#1E2433', border: '1px solid #2D3748',
+                    color: '#94A3B8', fontWeight: 400,
+                  }}>
+                    {tag}
+                  </span>
+                ))}
+              </div>
+            );
+          })()}
 
           {/* ── Content ── */}
           {loading ? (
@@ -410,6 +499,7 @@ const RegulatoryNews = () => {
                 item={item}
                 index={idx}
                 stale={isStale}
+                activeFilter={activeFilter}
                 onClick={() => setSelectedItem(item)}
               />
             ))}

@@ -271,29 +271,137 @@ def _score_regulation(item: dict, sector: str) -> dict:
     }
 
 
-@app.get("/regulations/{cin}", tags=["Analysis"])
-def get_tailored_regulations(cin: str):
-    """
-    Return all 40 news items scored and ranked by relevance to this company's sector.
-    Items are sorted: HIGH → MEDIUM → LOW, then by date descending within each tier.
-    """
-    from news_fetcher import FALLBACK_NEWS
+# ---------------------------------------------------------------------------
+# Relevant Regulations — violation-aware scoring helper
+# ---------------------------------------------------------------------------
 
+_REG_SECTOR_MAP: dict[str, list[str]] = {
+    "Financial Services & NBFC": ["Securities", "Tax", "Corporate"],
+    "Information Technology":    ["Tax", "Corporate"],
+    "Manufacturing":             ["GST", "Corporate", "Tax"],
+    "Healthcare":                ["GST", "Corporate"],
+    "Real Estate":               ["GST", "Tax", "Corporate"],
+    "Maritime":                  ["GST", "Corporate"],
+    "EdTech":                    ["Tax", "Corporate", "GST"],
+}
+
+_VIOLATION_CATEGORY_MAP: dict[str, str] = {
+    "gst":           "GST",
+    "director":      "Corporate",
+    "roc":           "Corporate",
+    "tds":           "Tax",
+    "advance tax":   "Tax",
+    "annual return": "Corporate",
+    "sebi":          "Securities",
+    "income tax":    "Tax",
+}
+
+
+async def get_relevant_regulations(
+    company: dict, violations: list
+) -> tuple[list, dict]:
+    """Score and filter news items by sector relevance + active violation categories.
+
+    Returns (scored_items, debug_info) so callers can surface debug metadata.
+    """
+    news = await get_regulatory_news()
+    total_before = len(news)
+
+    sector = company.get("sector", "")
+    # Debug: print the exact sector value so we can inspect mismatches
+    print(f"[regulations] company='{company.get('name')}' sector='{sector}'")
+
+    matched_categories = _REG_SECTOR_MAP.get(sector)
+    if matched_categories is None:
+        print(f"[regulations] WARNING: sector '{sector}' not in _REG_SECTOR_MAP — using default ['Corporate', 'Tax']")
+        matched_categories = ["Corporate", "Tax"]
+    else:
+        print(f"[regulations] matched_categories={matched_categories}")
+
+    # Derive categories from active violations
+    violation_categories: set[str] = set()
+    for v in violations:
+        description = v.get("description", "").lower()
+        for keyword, category in _VIOLATION_CATEGORY_MAP.items():
+            if keyword in description:
+                violation_categories.add(category)
+
+    scored_news = []
+    for item in news:
+        score = 0
+        reason = ""
+
+        # Layer 1 — sector match
+        if item["category"] in matched_categories:
+            score += 1
+            reason = f"Relevant to {sector}"
+
+        # Layer 2 — violation match (higher priority)
+        if item["category"] in violation_categories:
+            score += 2
+            reason = "Directly related to your active violations"
+
+        # Layer 3 — severity boost
+        if item.get("severity") == "HIGH":
+            score += 1
+
+        if score > 0:
+            scored_news.append({
+                **item,
+                "relevance_score":  score,
+                "relevance_reason": reason,
+                "affects_you":      True,
+            })
+
+    scored_news.sort(key=lambda x: x["relevance_score"], reverse=True)
+    result = scored_news[:6]
+
+    debug_info = {
+        "company_sector":      sector,
+        "matched_categories":  matched_categories,
+        "total_before_filter": total_before,
+        "total_after_filter":  len(result),
+    }
+    print(f"[regulations] debug={debug_info}")
+    return result, debug_info
+
+
+@app.get("/regulations/{cin}", tags=["Analysis"])
+async def get_tailored_regulations(cin: str):
+    """
+    Return up to 6 regulatory news items scored by relevance to this company's
+    sector and active violations.
+
+    Scoring layers:
+      +1  — item category matches the company sector
+      +2  — item category matches an active violation category
+      +1  — item severity is HIGH
+
+    Response: { items, company_name, sector, total, debug }
+      debug.company_sector      — exact sector string from companies.json
+      debug.matched_categories  — categories used for Layer-1 scoring
+      debug.total_before_filter — total news items before scoring
+      debug.total_after_filter  — items returned after scoring/capping
+    """
     companies = _load_companies()
     company = next((c for c in companies if c["cin"] == cin), None)
     if company is None:
         raise HTTPException(status_code=404, detail=f"Company '{cin}' not found.")
 
-    sector = company.get("sector", "")
-    scored = [_score_regulation(item, sector) for item in FALLBACK_NEWS]
-    scored.sort(key=lambda x: -x["impact"])
+    from rule_engine import RuleEngine
+    violations = RuleEngine().evaluate(company)
+
+    try:
+        items, debug_info = await get_relevant_regulations(company, violations)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Regulation scoring failed: {str(e)}")
+
     return {
-        "cin": cin,
+        "items":        items,
         "company_name": company["name"],
-        "sector": sector,
-        "total": len(scored),
-        "high_count": sum(1 for r in scored if r["impact_label"] == "HIGH"),
-        "regulations": scored,
+        "sector":       company.get("sector", ""),
+        "total":        len(items),
+        "debug":        debug_info,
     }
 
 
@@ -309,11 +417,13 @@ async def analyze_company(cin: str):
       → fetch_regulations → generate_remediation → compile_output
 
     Returns a ComplianceStatus object with risk score, violations,
-    relevant regulations, and AI-generated remediation steps.
+    relevant regulations, AI-generated remediation steps, and a
+    `relevant_regulations` list scored by sector + active violations.
     """
     # Validate CIN exists before kicking off the expensive pipeline
     companies = _load_companies()
-    if not any(c["cin"] == cin for c in companies):
+    company = next((c for c in companies if c["cin"] == cin), None)
+    if company is None:
         raise HTTPException(status_code=404, detail=f"Company with CIN '{cin}' not found.")
 
     try:
@@ -330,6 +440,14 @@ async def analyze_company(cin: str):
 
     if "error" in result:
         raise HTTPException(status_code=404, detail=result["error"])
+
+    # Attach violation-aware relevant regulations
+    violations = result.get("violations", [])
+    try:
+        reg_items, _ = await get_relevant_regulations(company, violations)
+        result["relevant_regulations"] = reg_items
+    except Exception:
+        result["relevant_regulations"] = []
 
     return result
 
