@@ -1,14 +1,18 @@
 """
 ComplianceX ChromaDB Client
-Manages a local vector store of Indian compliance regulations.
-Pre-loads 8 regulation snippets and exposes a semantic search function.
+Manages a local in-memory vector store of Indian compliance regulations.
+Uses SentenceTransformer (all-MiniLM-L6-v2) for embeddings — downloaded once
+and cached by HuggingFace Hub to ~/.cache/huggingface.
+
+Pre-loads 8 real Indian compliance regulation snippets and exposes a semantic
+search function used by both the LangGraph pipeline and the REST API.
 """
 
 import chromadb
-from chromadb.utils import embedding_functions
+from chromadb.utils.embedding_functions import SentenceTransformerEmbeddingFunction
 
 # ---------------------------------------------------------------------------
-# Regulation Corpus
+# Regulation Corpus — 8 real Indian law snippets
 # ---------------------------------------------------------------------------
 
 REGULATIONS = [
@@ -27,7 +31,7 @@ REGULATIONS = [
         "metadata": {
             "act": "Companies Act 2013",
             "section": "Section 92 — Annual Return",
-            "penalty": "₹50,000 + ₹500/day up to ₹5,00,000",
+            "penalty": "Rs 50,000 + Rs 500/day up to Rs 5,00,000",
         },
     },
     {
@@ -35,18 +39,18 @@ REGULATIONS = [
         "document": (
             "Section 92(5) of the Companies Act 2013 states that if a company fails "
             "to file its annual return before the expiry of the period specified, "
-            "the company shall be liable to a penalty of ₹50,000 and in case of "
-            "continuing failure, with further penalty of ₹100 for each day during "
-            "which such failure continues, subject to a maximum of ₹5,00,000. "
+            "the company shall be liable to a penalty of Rs 50,000 and in case of "
+            "continuing failure, with further penalty of Rs 100 for each day during "
+            "which such failure continues, subject to a maximum of Rs 5,00,000. "
             "Every officer of the company who is in default shall be liable to a "
-            "penalty of ₹50,000, and in case of continuing failure, ₹100 per day "
-            "subject to a maximum of ₹5,00,000. Late filing with additional fee "
+            "penalty of Rs 50,000, and in case of continuing failure, Rs 100 per day "
+            "subject to a maximum of Rs 5,00,000. Late filing with additional fee "
             "under Section 403 is permitted within 270 days of the due date."
         ),
         "metadata": {
             "act": "Companies Act 2013",
             "section": "Section 92(5) — Penalty for Non-Filing of Annual Return",
-            "penalty": "₹50,000 + ₹100/day up to ₹5,00,000",
+            "penalty": "Rs 50,000 + Rs 100/day up to Rs 5,00,000",
         },
     },
     {
@@ -79,12 +83,12 @@ REGULATIONS = [
             "office in all companies other than the company in which they have committed "
             "the default. Any person who acts as a director when disqualified shall be "
             "punishable with imprisonment for a term up to one year or with fine not "
-            "less than ₹1,00,000 but which may extend to ₹5,00,000, or with both."
+            "less than Rs 1,00,000 but which may extend to Rs 5,00,000, or with both."
         ),
         "metadata": {
             "act": "Companies Act 2013",
             "section": "Section 167(1) — Vacation of Office of Director",
-            "penalty": "Imprisonment up to 1 year + fine ₹1,00,000 to ₹5,00,000",
+            "penalty": "Imprisonment up to 1 year + fine Rs 1,00,000 to Rs 5,00,000",
         },
     },
     {
@@ -95,14 +99,14 @@ REGULATIONS = [
             "month or quarter (for QRMP scheme taxpayers) electronically in Form GSTR-3B. "
             "Monthly filers must file by the 20th of the following month. Quarterly filers "
             "must file by the 22nd or 24th of the month following the quarter. "
-            "Late fee under Section 47 is ₹50 per day (₹25 CGST + ₹25 SGST) for "
-            "returns with tax liability and ₹20 per day (₹10 CGST + ₹10 SGST) for "
-            "nil returns, subject to a maximum of ₹10,000 per return."
+            "Late fee under Section 47 is Rs 50 per day (Rs 25 CGST + Rs 25 SGST) for "
+            "returns with tax liability and Rs 20 per day (Rs 10 CGST + Rs 10 SGST) for "
+            "nil returns, subject to a maximum of Rs 10,000 per return."
         ),
         "metadata": {
             "act": "CGST Act 2017",
             "section": "Section 39 — Furnishing of Returns",
-            "penalty": "₹50/day (with liability) or ₹20/day (nil) up to ₹10,000",
+            "penalty": "Rs 50/day (with liability) or Rs 20/day (nil) up to Rs 10,000",
         },
     },
     {
@@ -111,7 +115,7 @@ REGULATIONS = [
             "Section 47 of the CGST Act 2017 prescribes late fees for delayed filing "
             "of returns. Where a registered person fails to furnish the return required "
             "under Section 39 by the due date, they shall be liable to pay a late fee "
-            "of ₹100 for every day of delay up to ₹5,000. If a return is not filed "
+            "of Rs 100 for every day of delay up to Rs 5,000. If a return is not filed "
             "for six consecutive months or two consecutive quarters, the GST "
             "registration may be cancelled under Section 29(2)(c). Interest at 18% per "
             "annum is levied under Section 50 on unpaid tax from the due date. "
@@ -120,7 +124,7 @@ REGULATIONS = [
         "metadata": {
             "act": "CGST Act 2017",
             "section": "Section 47 — Late Fee for Delayed GST Returns",
-            "penalty": "₹100/day up to ₹5,000; possible registration cancellation",
+            "penalty": "Rs 100/day up to Rs 5,000; possible registration cancellation",
         },
     },
     {
@@ -153,20 +157,20 @@ REGULATIONS = [
             "filed with the Registrar within 30 days of the AGM in Form AOC-4. "
             "Section 137(3) provides that if a company fails to file financial statements "
             "before the expiry of the period, the company shall be liable to a penalty "
-            "of ₹10,000 and in case of continuing failure, with further penalty of "
-            "₹100 for each day during which such failure continues, subject to a "
-            "maximum of ₹2,00,000. Every officer in default is similarly penalised."
+            "of Rs 10,000 and in case of continuing failure, with further penalty of "
+            "Rs 100 for each day during which such failure continues, subject to a "
+            "maximum of Rs 2,00,000. Every officer in default is similarly penalised."
         ),
         "metadata": {
             "act": "Companies Act 2013",
             "section": "Section 137 — Filing of Financial Statements",
-            "penalty": "₹10,000 + ₹100/day up to ₹2,00,000",
+            "penalty": "Rs 10,000 + Rs 100/day up to Rs 2,00,000",
         },
     },
 ]
 
 # ---------------------------------------------------------------------------
-# ChromaDB Setup
+# ChromaDB Setup — uses SentenceTransformer (cached by HuggingFace Hub)
 # ---------------------------------------------------------------------------
 
 _client: chromadb.ClientAPI | None = None
@@ -180,10 +184,11 @@ def _get_collection():
     if _collection is not None:
         return _collection
 
-    # Use the default sentence-transformers embedding function (all-MiniLM-L6-v2)
-    ef = embedding_functions.DefaultEmbeddingFunction()
+    # SentenceTransformerEmbeddingFunction downloads the model once and caches it
+    # under ~/.cache/huggingface — no ONNX runtime needed.
+    ef = SentenceTransformerEmbeddingFunction(model_name="all-MiniLM-L6-v2")
 
-    _client = chromadb.Client()  # in-memory; swap for chromadb.PersistentClient(path=) if desired
+    _client = chromadb.Client()  # in-memory; swap for PersistentClient if desired
     _collection = _client.get_or_create_collection(
         name="regulations",
         embedding_function=ef,
@@ -210,7 +215,7 @@ def search_regulation(query: str, n_results: int = 2) -> list[dict]:
         n_results: Number of top matching chunks to return (default 2)
 
     Returns:
-        List of dicts with keys: document, metadata, distance
+        List of dicts with keys: document, metadata, relevance_score
     """
     collection = _get_collection()
 
@@ -228,7 +233,7 @@ def search_regulation(query: str, n_results: int = 2) -> list[dict]:
         hits.append({
             "document": doc,
             "metadata": meta,
-            "relevance_score": round(1 - distance, 4),  # convert distance → similarity
+            "relevance_score": round(1 - distance, 4),  # cosine distance → similarity
         })
 
     return hits
