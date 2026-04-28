@@ -1,11 +1,14 @@
 """
 ComplianceX — FastAPI Backend
 Endpoints:
-  GET  /companies              → list of all companies (summary)
-  GET  /company/{cin}          → full company object
-  POST /analyze/{cin}          → run LangGraph pipeline, return ComplianceStatus
-  GET  /search-regulation?q=   → semantic search over ChromaDB regulations
-  POST /news/analyze           → scrape + AI-analyze a regulatory news item
+  GET  /companies              -> list of all companies (summary)
+  GET  /company/{cin}          -> full company object
+  POST /analyze/{cin}          -> run LangGraph pipeline, return ComplianceStatus
+  GET  /search-regulation?q=   -> semantic search over ChromaDB regulations
+  GET  /news                   -> live + curated regulatory news (merged)
+  POST /news/analyze           -> scrape + AI-analyze a regulatory news item
+  GET  /tax/{cin}              -> Tax Expert full analysis for a company
+  GET  /ca-verify/{cin}        -> CA filing verification against regulation changes
 """
 
 import json
@@ -23,6 +26,8 @@ from chromadb_client import search_regulation
 from gemini_client import analyze_regulatory_news
 from langgraph_orchestrator import run_analysis
 from news_fetcher import get_regulatory_news, get_cache_info, FALLBACK_NEWS
+from tax_expert import compute_tax_analysis
+from ca_verifier import verify_ca_filings
 
 # ---------------------------------------------------------------------------
 # Bootstrap
@@ -259,6 +264,64 @@ async def analyze_news_item(req: NewsAnalyzeRequest):
         source=req.source,
         category=req.category,
     )
+
+    return result
+
+
+# ---------------------------------------------------------------------------
+# Tax Expert
+# ---------------------------------------------------------------------------
+
+@app.get("/tax/{cin}", tags=["Tax"])
+async def get_tax_analysis(cin: str):
+    """
+    Run the Tax Expert (Doctor 3) analysis for a company.
+
+    Computes:
+    - Advance tax installments with PAID/MISSED/UPCOMING status
+    - TDS obligations across Salary, Professional Fees, Rent, Contractor
+    - MAT applicability check (Section 115JB)
+    - Sector-specific savings opportunities (80IC, 10AA, 35AD)
+    - Risk flags and effective tax rate
+    """
+    companies = _load_companies()
+    company = next((c for c in companies if c["cin"] == cin), None)
+    if company is None:
+        raise HTTPException(status_code=404, detail=f"Company with CIN '{cin}' not found.")
+
+    try:
+        result = compute_tax_analysis(company)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Tax analysis failed: {str(e)}")
+
+    return result
+
+
+# ---------------------------------------------------------------------------
+# CA Verifier
+# ---------------------------------------------------------------------------
+
+@app.get("/ca-verify/{cin}", tags=["CA Verification"])
+async def ca_verify(cin: str):
+    """
+    Cross-reference synthesised company filings against the regulatory news
+    dataset to detect AT_RISK and OUTDATED filings.
+
+    Status:
+    - VERIFIED  — no conflicting regulation found
+    - AT_RISK   — filed within 30 days of a new regulation
+    - OUTDATED  — filed before a regulation that amends a prior rule
+    """
+    companies = _load_companies()
+    company = next((c for c in companies if c["cin"] == cin), None)
+    if company is None:
+        raise HTTPException(status_code=404, detail=f"Company with CIN '{cin}' not found.")
+
+    try:
+        news_data = await get_regulatory_news(max_items=50)
+        result = verify_ca_filings(company, news_data)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"CA verification failed: {str(e)}")
 
     return result
 
