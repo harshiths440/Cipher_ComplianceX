@@ -1,0 +1,431 @@
+[
+  {
+    "cin": "U72900KA2018PTC123456",
+    "name": "Technova Solutions Pvt Ltd",
+    "type": "Private Limited",
+    "sector": "IT Services",
+    "incorporation_date": "2018-03-15",
+    "city": "Bengaluru",
+    "directors": [
+      {
+        "name": "Arjun Mehta",
+        "din": "08123456",
+        "disqualified": false
+      },
+      {
+        "name": "Priya Nair",
+        "din": "08234567",
+        "disqualified": false
+      }
+    ],
+    "compliance_history": {
+      "annual_returns_filed": true,
+      "last_annual_return_date": "2024-10-01",
+      "overdue_filings": 0,
+      "filing_delay_days_avg": 12,
+      "violations_last_12m": 0,
+      "penalty_paid_inr": 0
+    },
+    "financials": {
+      "annual_turnover_inr": 12000000,
+      "tax_liability_inr": 1800000,
+      "tax_paid_inr": 1800000,
+      "gst_returns_filed": true,
+      "gst_pending_months": 0
+    },
+    "active_obligations": 4,
+    "sector_risk_index": 0.3
+  },
+  {
+    "cin": "U51909MH2015PTC987654",
+    "name": "Redstone Retail Ventures Pvt Ltd",
+    "type": "Private Limited",
+    "sector": "Retail & E-Commerce",
+    "incorporation_date": "2015-07-22",
+    "city": "Mumbai",
+    "directors": [
+      {
+        "name": "Vikram Shenoy",
+        "din": "07654321",
+        "disqualified": true
+      },
+      {
+        "name": "Asha Iyer",
+        "din": "07765432",
+        "disqualified": false
+      }
+    ],
+    "compliance_history": {
+      "annual_returns_filed": false,
+      "last_annual_return_date": "2022-11-30",
+      "overdue_filings": 4,
+      "filing_delay_days_avg": 78,
+      "violations_last_12m": 5,
+      "penalty_paid_inr": 85000
+    },
+    "financials": {
+      "annual_turnover_inr": 45000000,
+      "tax_liability_inr": 6750000,
+      "tax_paid_inr": 3200000,
+      "gst_returns_filed": false,
+      "gst_pending_months": 7
+    },
+    "active_obligations": 9,
+    "sector_risk_index": 0.75
+  },
+  {
+    "cin": "U26100DL2020PTC456789",
+    "name": "Greenfield Manufacturing Pvt Ltd",
+    "type": "Private Limited",
+    "sector": "Manufacturing",
+    "incorporation_date": "2020-01-10",
+    "city": "Delhi",
+    "directors": [
+      {
+        "name": "Rajesh Gupta",
+        "din": "09345678",
+        "disqualified": false
+      }
+    ],
+    "compliance_history": {
+      "annual_returns_filed": true,
+      "last_annual_return_date": "2024-08-15",
+      "overdue_filings": 2,
+      "filing_delay_days_avg": 38,
+      "violations_last_12m": 1,
+      "penalty_paid_inr": 15000
+    },
+    "financials": {
+      "annual_turnover_inr": 28000000,
+      "tax_liability_inr": 4200000,
+      "tax_paid_inr": 4200000,
+      "gst_returns_filed": true,
+      "gst_pending_months": 1
+    },
+    "active_obligations": 6,
+    "sector_risk_index": 0.55
+  },
+  {
+    "cin": "U74140TN2017PTC654321",
+    "name": "Clearpath Legal Consulting Pvt Ltd",
+    "type": "Private Limited",
+    "sector": "Legal & Professional Services",
+    "incorporation_date": "2017-09-05",
+    "city": "Chennai",
+    "directors": [
+      {
+        "name": "Meenakshi Rajan",
+        "din": "07890123",
+        "disqualified": false
+      },
+      {
+        "name": "Suresh Krishnaswamy",
+        "din": "07901234",
+        "disqualified": false
+      }
+    ],
+    "compliance_history": {
+      "annual_returns_filed": true,
+      "last_annual_return_date": "2024-09-20",
+      "overdue_filings": 0,
+      "filing_delay_days_avg": 8,
+      "violations_last_12m": 0,
+      "penalty_paid_inr": 0
+    },
+    "financials": {
+      "annual_turnover_inr": 8500000,
+      "tax_liability_inr": 1275000,
+      "tax_paid_inr": 1275000,
+      "gst_returns_filed": true,
+      "gst_pending_months": 0
+    },
+    "active_obligations": 3,
+    "sector_risk_index": 0.2
+  },
+  {
+    "cin": "U45201GJ2019PTC321098",
+    "name": "Swiftline Logistics Pvt Ltd",
+    "type": "Private Limited",
+    "sector": "Logistics & Supply Chain",
+    "incorporation_date": "2019-06-18",
+    "city": "Ahmedabad",
+    "directors": [
+      {
+        "name": "Haresh Patel",
+        "din": "09012345",
+        "disqualified": false
+      },
+      {
+        "name": "Dhruv Shah",
+        "din": "09123456",
+        "disqualified": true
+      }
+    ],
+    "compliance_history": {
+      "annual_returns_filed": true,
+      "last_annual_return_date": "2024-07-01",
+      "overdue_filings": 3,
+      "filing_delay_days_avg": 55,
+      "violations_last_12m": 3,
+      "penalty_paid_inr": 42000
+    },
+    "financials": {
+      "annual_turnover_inr": 35000000,
+      "tax_liability_inr": 5250000,
+      "tax_paid_inr": 5250000,
+      "gst_returns_filed": true,
+      "gst_pending_months": 3
+    },
+    "active_obligations": 7,
+    "sector_risk_index": 0.6
+  },
+  {
+    "cin": "U85110RJ2021PTC112233",
+    "name": "Arogya Health Tech Pvt Ltd",
+    "type": "Private Limited",
+    "sector": "Healthcare & MedTech",
+    "incorporation_date": "2021-03-01",
+    "city": "Jaipur",
+    "directors": [
+      {
+        "name": "Dr. Kavita Sharma",
+        "din": "09234567",
+        "disqualified": false
+      },
+      {
+        "name": "Nikhil Bansal",
+        "din": "09345671",
+        "disqualified": false
+      }
+    ],
+    "compliance_history": {
+      "annual_returns_filed": true,
+      "last_annual_return_date": "2024-11-10",
+      "overdue_filings": 1,
+      "filing_delay_days_avg": 22,
+      "violations_last_12m": 0,
+      "penalty_paid_inr": 5000
+    },
+    "financials": {
+      "annual_turnover_inr": 9500000,
+      "tax_liability_inr": 1425000,
+      "tax_paid_inr": 1425000,
+      "gst_returns_filed": true,
+      "gst_pending_months": 0
+    },
+    "active_obligations": 5,
+    "sector_risk_index": 0.45
+  },
+  {
+    "cin": "U65910MH2013PTC445566",
+    "name": "Pinnacle Capital Advisors Pvt Ltd",
+    "type": "Private Limited",
+    "sector": "Financial Services & NBFC",
+    "incorporation_date": "2013-11-25",
+    "city": "Mumbai",
+    "directors": [
+      {
+        "name": "Sanjay Khanna",
+        "din": "06789012",
+        "disqualified": true
+      },
+      {
+        "name": "Ritu Agarwal",
+        "din": "06890123",
+        "disqualified": true
+      }
+    ],
+    "compliance_history": {
+      "annual_returns_filed": false,
+      "last_annual_return_date": "2021-09-30",
+      "overdue_filings": 5,
+      "filing_delay_days_avg": 120,
+      "violations_last_12m": 6,
+      "penalty_paid_inr": 175000
+    },
+    "financials": {
+      "annual_turnover_inr": 78000000,
+      "tax_liability_inr": 11700000,
+      "tax_paid_inr": 5500000,
+      "gst_returns_filed": false,
+      "gst_pending_months": 9
+    },
+    "active_obligations": 14,
+    "sector_risk_index": 0.9
+  },
+  {
+    "cin": "U01100AP2022PTC778899",
+    "name": "Haritha Agro Foods Pvt Ltd",
+    "type": "Private Limited",
+    "sector": "Agribusiness & Food Processing",
+    "incorporation_date": "2022-05-14",
+    "city": "Hyderabad",
+    "directors": [
+      {
+        "name": "Venkata Rao",
+        "din": "09456789",
+        "disqualified": false
+      }
+    ],
+    "compliance_history": {
+      "annual_returns_filed": true,
+      "last_annual_return_date": "2024-10-25",
+      "overdue_filings": 0,
+      "filing_delay_days_avg": 15,
+      "violations_last_12m": 0,
+      "penalty_paid_inr": 0
+    },
+    "financials": {
+      "annual_turnover_inr": 6200000,
+      "tax_liability_inr": 930000,
+      "tax_paid_inr": 930000,
+      "gst_returns_filed": true,
+      "gst_pending_months": 0
+    },
+    "active_obligations": 3,
+    "sector_risk_index": 0.25
+  },
+  {
+    "cin": "U74999PB2016PTC334455",
+    "name": "Infracore Builders Pvt Ltd",
+    "type": "Private Limited",
+    "sector": "Real Estate & Construction",
+    "incorporation_date": "2016-08-30",
+    "city": "Chandigarh",
+    "directors": [
+      {
+        "name": "Gurpreet Singh",
+        "din": "07678901",
+        "disqualified": false
+      },
+      {
+        "name": "Manpreet Kaur",
+        "din": "07789012",
+        "disqualified": false
+      }
+    ],
+    "compliance_history": {
+      "annual_returns_filed": true,
+      "last_annual_return_date": "2024-06-20",
+      "overdue_filings": 2,
+      "filing_delay_days_avg": 45,
+      "violations_last_12m": 2,
+      "penalty_paid_inr": 28000
+    },
+    "financials": {
+      "annual_turnover_inr": 95000000,
+      "tax_liability_inr": 14250000,
+      "tax_paid_inr": 14250000,
+      "gst_returns_filed": true,
+      "gst_pending_months": 2
+    },
+    "active_obligations": 8,
+    "sector_risk_index": 0.65
+  },
+  {
+    "cin": "U40100WB2014PTC556677",
+    "name": "Voltex Energy Solutions Pvt Ltd",
+    "type": "Private Limited",
+    "sector": "Renewable Energy",
+    "incorporation_date": "2014-04-12",
+    "city": "Kolkata",
+    "directors": [
+      {
+        "name": "Debashish Roy",
+        "din": "07123456",
+        "disqualified": false
+      }
+    ],
+    "compliance_history": {
+      "annual_returns_filed": true,
+      "last_annual_return_date": "2024-09-05",
+      "overdue_filings": 0,
+      "filing_delay_days_avg": 20,
+      "violations_last_12m": 1,
+      "penalty_paid_inr": 8000
+    },
+    "financials": {
+      "annual_turnover_inr": 32000000,
+      "tax_liability_inr": 4800000,
+      "tax_paid_inr": 4800000,
+      "gst_returns_filed": true,
+      "gst_pending_months": 0
+    },
+    "active_obligations": 5,
+    "sector_risk_index": 0.35
+  },
+  {
+    "cin": "U63090KL2012PTC889900",
+    "name": "Seaways Maritime Pvt Ltd",
+    "type": "Private Limited",
+    "sector": "Shipping & Maritime",
+    "incorporation_date": "2012-02-08",
+    "city": "Kochi",
+    "directors": [
+      {
+        "name": "Thomas Mathew",
+        "din": "06234567",
+        "disqualified": false
+      },
+      {
+        "name": "Jose Varghese",
+        "din": "06345678",
+        "disqualified": true
+      }
+    ],
+    "compliance_history": {
+      "annual_returns_filed": true,
+      "last_annual_return_date": "2024-05-15",
+      "overdue_filings": 3,
+      "filing_delay_days_avg": 62,
+      "violations_last_12m": 4,
+      "penalty_paid_inr": 65000
+    },
+    "financials": {
+      "annual_turnover_inr": 120000000,
+      "tax_liability_inr": 18000000,
+      "tax_paid_inr": 18000000,
+      "gst_returns_filed": true,
+      "gst_pending_months": 4
+    },
+    "active_obligations": 10,
+    "sector_risk_index": 0.7
+  },
+  {
+    "cin": "U80301HR2023PTC001122",
+    "name": "EduBridge EdTech Pvt Ltd",
+    "type": "Private Limited",
+    "sector": "Education Technology",
+    "incorporation_date": "2023-01-20",
+    "city": "Gurugram",
+    "directors": [
+      {
+        "name": "Ankita Joshi",
+        "din": "09567890",
+        "disqualified": false
+      },
+      {
+        "name": "Rohan Verma",
+        "din": "09678901",
+        "disqualified": false
+      }
+    ],
+    "compliance_history": {
+      "annual_returns_filed": true,
+      "last_annual_return_date": "2024-12-01",
+      "overdue_filings": 0,
+      "filing_delay_days_avg": 5,
+      "violations_last_12m": 0,
+      "penalty_paid_inr": 0
+    },
+    "financials": {
+      "annual_turnover_inr": 3500000,
+      "tax_liability_inr": 525000,
+      "tax_paid_inr": 525000,
+      "gst_returns_filed": true,
+      "gst_pending_months": 0
+    },
+    "active_obligations": 2,
+    "sector_risk_index": 0.15
+  }
+]
