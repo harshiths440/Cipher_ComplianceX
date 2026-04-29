@@ -170,11 +170,11 @@ const RiskAnalyserTab = ({ cin }) => {
   );
 };
 
-const TaxTab = ({ cin, companyName }) => {
+const TaxTab = ({ cin }) => {
   const [tax, setTax] = useState(null);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState(null);
-  const [savingStatus, setSavingStatus] = useState({});
+  const [actionedCards, setActionedCards] = useState({});
 
   useEffect(() => {
     fetch(`${API}/tax/${cin}`)
@@ -183,50 +183,6 @@ const TaxTab = ({ cin, companyName }) => {
       .catch(e => setErr(String(e)))
       .finally(() => setLoading(false));
   }, [cin]);
-
-  useEffect(() => {
-    const interval = setInterval(() => {
-      fetch(`${API}/tax/${cin}/countdown`)
-        .then(r => r.ok ? r.json() : Promise.reject())
-        .then(data => {
-          setTax(prev => {
-             if (!prev) return prev;
-             return {
-               ...prev,
-               advance_tax: { ...prev.advance_tax, installments: data.installments, interest_liability: data.total_interest_accrued }
-             };
-          });
-        })
-        .catch(console.error);
-    }, 60000);
-    return () => clearInterval(interval);
-  }, [cin]);
-
-  const handleApplySaving = async (scenario) => {
-    setSavingStatus(prev => ({ ...prev, [scenario.id]: 'loading' }));
-    try {
-      const res = await fetch(`${API}/tax/${cin}/apply-saving`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          scenario_id: scenario.id,
-          scenario_title: scenario.title,
-          form: scenario.form,
-          saving: scenario.saving,
-          company_name: companyName || 'Company'
-        })
-      });
-      if (res.ok) {
-         setSavingStatus(prev => ({ ...prev, [scenario.id]: 'sent' }));
-         alert(`💰 ₹${scenario.saving.toLocaleString('en-IN')} saving opportunity sent to CA — filing request created`);
-      } else {
-         throw new Error('Failed to send to CA');
-      }
-    } catch (e) {
-       console.error(e);
-       setSavingStatus(prev => ({ ...prev, [scenario.id]: 'error' }));
-    }
-  };
 
   if (loading) return <LoadingSpinner message="Analysing Tax Intelligence…" />;
   if (err)     return <div className="p-6 text-red-400 text-sm">Failed to load tax intelligence.</div>;
@@ -423,84 +379,38 @@ const TaxTab = ({ cin, companyName }) => {
         </div>
       </div>
 
-      {/* ── What If Simulator ── */}
-      {tax.what_if && tax.what_if.scenarios && tax.what_if.scenarios.length > 0 && (
-        <div className="bg-[#1C1F2E] border border-indigo-500/20 rounded-[32px] p-8 relative overflow-hidden">
-          <div className="absolute top-0 right-0 p-8 opacity-5"><Check className="w-32 h-32 text-indigo-400" /></div>
-          <div className="relative z-10">
-            <h3 className="text-sm font-semibold text-indigo-400 uppercase tracking-wider mb-2">💡 What If Simulator</h3>
-            <div className="flex items-center gap-3 p-4 mb-6 bg-indigo-500/10 border border-indigo-500/30 rounded-xl">
-              <span className="text-2xl">⚡</span>
-              <p className="text-indigo-300 font-bold">{fmt(tax.what_if.total_potential_saving)} in total savings identified across {tax.what_if.total_scenarios} scenarios</p>
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {tax.what_if.scenarios.map((s, i) => {
-                const isSent = savingStatus[s.id] === 'sent';
-                const isLoading = savingStatus[s.id] === 'loading';
-                return (
-                  <div key={i} className="bg-[#0A0F1E] border border-white/5 rounded-2xl p-6 flex flex-col justify-between">
-                    <div>
-                      <div className="flex justify-between items-start mb-4">
-                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-widest ${s.urgency === 'HIGH' ? 'bg-rose-500/10 text-rose-400 border border-rose-500/20' : 'bg-orange-500/10 text-orange-400 border border-orange-500/20'}`}>
-                          {s.urgency} URGENCY
-                        </span>
-                        {s.days_to_act !== undefined && (
-                          <span className="text-xs text-gray-500 font-semibold">{s.days_to_act > 0 ? `${s.days_to_act} days to act` : 'Act immediately'}</span>
-                        )}
-                      </div>
-                      <h4 className="text-lg font-black text-white mb-4 leading-tight">{s.title}</h4>
-                      
-                      <div className="space-y-3 mb-6">
-                        <div>
-                          <p className="text-[10px] text-gray-500 uppercase tracking-widest font-bold mb-1">Now</p>
-                          <p className="text-sm text-rose-400/90 font-medium">{s.current}</p>
-                        </div>
-                        <div>
-                          <p className="text-[10px] text-gray-500 uppercase tracking-widest font-bold mb-1">If Done</p>
-                          <p className="text-sm text-emerald-400/90 font-medium">{s.if_done}</p>
-                        </div>
-                      </div>
-                    </div>
-                    
-                    <div className="mt-auto">
-                      <div className="flex items-center justify-between pt-4 border-t border-white/5">
-                        <div>
-                          <p className="text-[10px] text-gray-500 uppercase tracking-widest font-bold mb-1">Potential Saving</p>
-                          <p className="text-lg font-black text-emerald-400">{fmt(s.saving)}</p>
-                        </div>
-                        <button
-                          onClick={() => handleApplySaving(s)}
-                          disabled={isSent || isLoading}
-                          className={`px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-wider transition-colors flex items-center gap-2 ${isSent ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' : isLoading ? 'bg-indigo-600/50 text-white cursor-wait' : 'bg-indigo-600 hover:bg-indigo-500 text-white'}`}
-                        >
-                          {isSent ? '✓ Sent to CA' : isLoading ? 'Sending...' : 'Apply → Send to CA'}
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        </div>
-      )}
-
       {/* ── Savings Opportunities ── */}
       <div>
         <h3 className="text-sm font-semibold text-gray-300 uppercase tracking-wider mb-4">Savings Opportunities</h3>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          {(tax.savings_opportunities || []).map((s, i) => (
-            <div key={i} className={`p-5 rounded-xl border transition-all ${s.applicable ? 'border-green-500/30 bg-green-500/5' : 'border-white/5 bg-white/2 opacity-40'}`}>
-              <div className="flex justify-between items-start mb-2">
-                <span className="text-xs font-mono font-bold text-indigo-400">§ {s.section}</span>
-                {s.applicable && <span className="text-xs bg-green-500/20 text-green-400 px-2 py-0.5 rounded-full">Applicable</span>}
+          {(tax.savings_opportunities || []).map((s, i) => {
+            const actioned = actionedCards[i];
+            return (
+              <div key={i} className={`p-5 rounded-xl border transition-all ${actioned ? 'border-emerald-500/40 bg-emerald-500/5' : s.applicable ? 'border-green-500/30 bg-green-500/5' : 'border-white/5 bg-white/2 opacity-40'}`}>
+                <div className="flex justify-between items-start mb-2">
+                  <span className="text-xs font-mono font-bold text-indigo-400">§ {s.section}</span>
+                  {actioned
+                    ? <span className="text-xs bg-emerald-500/20 text-emerald-400 px-2 py-0.5 rounded-full font-semibold">✓ Noted</span>
+                    : s.applicable && <span className="text-xs bg-green-500/20 text-green-400 px-2 py-0.5 rounded-full">Applicable</span>
+                  }
+                </div>
+                <p className="text-xs text-gray-400 mb-3 leading-relaxed">{s.description}</p>
+                {s.applicable && (
+                  <div className="flex items-center justify-between mt-2">
+                    <p className="text-lg font-black text-green-400">Save {fmt(s.estimated_saving)}</p>
+                    {!actioned && (
+                      <button
+                        onClick={() => setActionedCards(prev => ({ ...prev, [i]: true }))}
+                        className="text-[10px] font-bold uppercase tracking-wider px-3 py-1.5 rounded-lg border border-white/10 text-gray-400 hover:border-emerald-500/40 hover:text-emerald-400 hover:bg-emerald-500/5 transition-all"
+                      >
+                        Mark as Actioned
+                      </button>
+                    )}
+                  </div>
+                )}
               </div>
-              <p className="text-xs text-gray-400 mb-3 leading-relaxed">{s.description}</p>
-              {s.applicable && (
-                <p className="text-lg font-black text-green-400">Save {fmt(s.estimated_saving)}</p>
-              )}
-            </div>
-          ))}
+            );
+          })}
         </div>
       </div>
     </div>

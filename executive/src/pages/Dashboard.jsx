@@ -1,11 +1,82 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, AlertTriangle, IndianRupee, Clock, Send, Plus, X, Activity, FileSignature, LogOut } from 'lucide-react';
+import { ArrowLeft, AlertTriangle, IndianRupee, Clock, Send, Plus, X, Activity, FileSignature, LogOut, Bell, CheckCircle } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
 const API = 'http://localhost:8000';
 
 const fmt = (n) => `₹${n?.toLocaleString('en-IN') ?? 0}`;
+
+const FORM_CONTEXT = {
+  'GSTR-3B': {
+    urgency: 'MEDIUM',
+    section: 'S.39 CGST Act',
+    description: 'Monthly summary return — outward supplies, ITC claimed & net tax payable',
+    now: 'GST summary return pending — late fee ₹50/day accruing',
+    if_done: 'Avoid penalties, maintain ITC eligibility, stay GST-compliant',
+  },
+  'GSTR-1': {
+    urgency: 'MEDIUM',
+    section: 'S.37 CGST Act',
+    description: 'Details of all outward supplies made during the month',
+    now: 'Outward supply details not filed — recipients cannot claim ITC',
+    if_done: 'Recipients unlock ITC claims; avoid ₹50/day late fee',
+  },
+  'MGT-7': {
+    urgency: 'HIGH',
+    section: 'S.92 Companies Act',
+    description: 'Annual Return to be filed with MCA within 60 days of AGM',
+    now: 'Annual Return overdue — ₹100/day penalty accumulating',
+    if_done: 'Restore compliance standing and avoid director disqualification',
+  },
+  'AOC-4': {
+    urgency: 'HIGH',
+    section: 'S.137 Companies Act',
+    description: 'Financial statements to be filed within 30 days of AGM',
+    now: 'Financial statements not filed — MCA penalties applicable',
+    if_done: 'Avoid ₹100/day fine; maintain good standing with ROC',
+  },
+  'DIR-3 KYC': {
+    urgency: 'HIGH',
+    section: 'Rule 12A Companies Rules',
+    description: 'Annual KYC verification for all active DIN holders',
+    now: 'DIN deactivated until KYC filed — director cannot sign documents',
+    if_done: 'Reactivate DIN; resume signing authority immediately',
+  },
+  'ITR-6': {
+    urgency: 'HIGH',
+    section: 'S.139 Income Tax Act',
+    description: 'Corporate income tax return for companies other than charitable',
+    now: 'Tax return not filed — interest u/s 234A accruing at 1%/month',
+    if_done: 'Stop interest accrual; avoid scrutiny and prosecution risk',
+  },
+  'FORM 15CA': {
+    urgency: 'LOW',
+    section: 'S.195 Income Tax Act',
+    description: 'Declaration for foreign remittance payments above threshold',
+    now: 'Foreign payment pending compliance declaration',
+    if_done: 'Authorise remittance legally; avoid TDS default',
+  },
+  '26Q, 24Q': {
+    urgency: 'HIGH',
+    section: 'S.200 Income Tax Act',
+    description: 'Quarterly TDS returns for non-salary (26Q) and salary (24Q) payments',
+    now: 'TDS returns overdue — interest @ 1.5%/month on deposited amounts',
+    if_done: 'Stop interest clock; enable deductees to claim TDS credit',
+  },
+};
+
+const getFormContext = (formName) =>
+  FORM_CONTEXT[formName] ||
+  Object.entries(FORM_CONTEXT).find(([k]) =>
+    formName?.toLowerCase().includes(k.toLowerCase())
+  )?.[1] || {
+    urgency: 'MEDIUM',
+    section: null,
+    description: 'Compliance filing request dispatched to CA.',
+    now: 'Filing request is pending CA action',
+    if_done: 'Filing completed and acknowledged',
+  };
 
 const StatusBadge = ({ s }) => {
   if (s === 'PENDING') return <span className="bg-gray-500/10 text-gray-400 border border-gray-500/30 px-2 py-0.5 rounded text-xs font-semibold uppercase">Pending</span>;
@@ -36,12 +107,25 @@ const ExecutiveDashboard = () => {
 
   // Live filings list
   const [filings, setFilings] = useState(data?.filing_requests || []);
+  const prevFilingsRef = useRef(data?.filing_requests || []);
+  const [flashedRows, setFlashedRows] = useState({});   // id → true while green flash active
+  const [whatIf, setWhatIf] = useState(null);
+  const [sentScenarios, setSentScenarios] = useState({});
+
+  // Live "Last CA Filing" stat (updated when a FILED event is detected)
+  const [liveLastFiling, setLiveLastFiling] = useState(null);
 
   // Chat AI state — must be here unconditionally (React Rules of Hooks)
   const [chatHistory, setChatHistory] = useState([]);
   const [chatInput, setChatInput] = useState('');
   const [chatLoading, setChatLoading] = useState(false);
   const chatEndRef = useRef(null);
+
+  // CA Responses — poll every 5s
+  const [alertsSent, setAlertsSent] = useState([]);
+  const prevAlertsRef = useRef([]);
+  const [toast, setToast] = useState(null);
+  const [filingToast, setFilingToast] = useState(null);
 
   // ALL HOOKS MUST BE ABOVE ANY EARLY RETURNS
   useEffect(() => {
@@ -57,9 +141,96 @@ const ExecutiveDashboard = () => {
     }
   }, [cin, data]);
 
+  // Fetch What-If tax scenarios
+  useEffect(() => {
+    if (cin) {
+      fetch(`${API}/tax/${cin}`)
+        .then(r => r.ok ? r.json() : null)
+        .then(d => { if (d?.what_if) setWhatIf(d.what_if); })
+        .catch(console.error);
+    }
+  }, [cin]);
+
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [chatHistory, chatLoading]);
+
+  // Poll GET /alerts/{cin} every 5 s; fire toast when CA acknowledges
+  useEffect(() => {
+    if (!cin) return;
+    const poll = () => {
+      fetch(`${API}/alerts/${cin}`)
+        .then(r => r.ok ? r.json() : [])
+        .then(list => {
+          const arr = Array.isArray(list) ? list : [];
+          const prev = prevAlertsRef.current;
+          arr.forEach(a => {
+            if (a.status === 'ACKNOWLEDGED') {
+              const wasAck = prev.some(p => p.id === a.id && p.status === 'ACKNOWLEDGED');
+              if (!wasAck) {
+                const tid = Date.now();
+                setToast({ message: `CA responded: "${a.ca_response}" — ${a.regulation_title}`, id: tid });
+                setTimeout(() => setToast(t => t?.id === tid ? null : t), 5000);
+              }
+            }
+          });
+          prevAlertsRef.current = arr;
+          setAlertsSent(arr);
+        })
+        .catch(console.error);
+    };
+    poll();
+    const iv = setInterval(poll, 5000);
+    return () => clearInterval(iv);
+  }, [cin]);
+
+  // Fix 1 — Poll /filing-requests/{cin} every 5 s
+  useEffect(() => {
+    if (!cin) return;
+    const pollFilings = () => {
+      fetch(`${API}/filing-requests/${cin}`)
+        .then(r => r.ok ? r.json() : [])
+        .then(list => {
+          const arr = Array.isArray(list) ? list : [];
+          const prev = prevFilingsRef.current;
+
+          arr.forEach(f => {
+            const prevEntry = prev.find(p => p.id === f.id);
+            // Fix 2 + 3 — detect new FILED transitions
+            if (f.status === 'FILED' && prevEntry && prevEntry.status !== 'FILED') {
+              // Flash the row green
+              setFlashedRows(old => ({ ...old, [f.id]: true }));
+              setTimeout(() => setFlashedRows(old => { const n = { ...old }; delete n[f.id]; return n; }), 1200);
+
+              // Fix 4 — update stat card live
+              setLiveLastFiling({
+                form: f.form_name,
+                date: f.filed_at ? new Date(f.filed_at).toLocaleDateString('en-IN') : new Date().toLocaleDateString('en-IN'),
+                ca: f.filed_by || 'CA',
+              });
+
+              // Fix 3 — filing confirmed toast
+              const tid = Date.now();
+              setFilingToast({
+                id: tid,
+                form: f.form_name,
+                ca: f.filed_by || 'CA',
+                ack: f.ack_number || '',
+                portal: f.ack_portal || 'MCA21 Portal',
+              });
+              setTimeout(() => setFilingToast(t => t?.id === tid ? null : t), 6000);
+            }
+          });
+
+          prevFilingsRef.current = arr;
+          setFilings(arr);
+        })
+        .catch(console.error);
+    };
+    pollFilings();
+    const iv = setInterval(pollFilings, 5000);
+    return () => clearInterval(iv);
+  }, [cin]);
 
   const refreshFilings = async () => {
     try {
@@ -177,6 +348,29 @@ Current compliance status:
     }
   };
 
+  const handleSendScenario = async (scenario) => {
+    setSentScenarios(prev => ({ ...prev, [scenario.id]: 'loading' }));
+    try {
+      const res = await fetch(`${API}/tax/${cin}/apply-saving`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          scenario_id: scenario.id,
+          scenario_title: scenario.title,
+          form: scenario.form,
+          saving: scenario.saving,
+          company_name: company.name
+        })
+      });
+      if (res.ok) {
+        setSentScenarios(prev => ({ ...prev, [scenario.id]: 'sent' }));
+        refreshFilings();
+      } else throw new Error();
+    } catch (e) {
+      setSentScenarios(prev => ({ ...prev, [scenario.id]: 'error' }));
+    }
+  };
+
   const logout = () => { sessionStorage.removeItem('exec_session'); navigate('/login') };
 
   return (
@@ -228,9 +422,16 @@ Current compliance status:
               <div className="p-2 bg-emerald-500/10 text-emerald-400 rounded-lg"><Clock className="w-5 h-5" /></div>
               <h3 className="text-sm text-gray-400 font-medium uppercase tracking-wider">Last CA Filing</h3>
             </div>
-            <p className="text-lg font-bold text-white mb-1">{ca_summary?.last_filed_form || 'No Filings'}</p>
-            {ca_summary?.last_filed_date && (
-              <p className="text-sm text-gray-400">{ca_summary.last_filed_date} · by {ca_summary.last_ca_name}</p>
+            {/* Fix 4 — live update when polling detects a new FILED */}
+            <p className="text-lg font-bold text-white mb-1">
+              {liveLastFiling?.form || ca_summary?.last_filed_form || 'No Filings'}
+            </p>
+            {(liveLastFiling || ca_summary?.last_filed_date) && (
+              <p className="text-sm text-gray-400">
+                {liveLastFiling
+                  ? `${liveLastFiling.date} · by ${liveLastFiling.ca}`
+                  : `${ca_summary.last_filed_date} · by ${ca_summary.last_ca_name}`}
+              </p>
             )}
           </div>
         </div>
@@ -277,49 +478,256 @@ Current compliance status:
           </div>
         </div>
 
-        {/* ROW 3: CA Filing Tracker */}
+        {/* ROW 3: CA Filing Tracker — What If Scenarios + Deduped Requests */}
         <div className="bg-[#111827] border border-white/10 rounded-2xl overflow-hidden">
           <div className="p-6 border-b border-white/10 flex items-center justify-between">
-            <h2 className="text-xl font-bold flex items-center gap-2"><Activity className="w-6 h-6 text-emerald-400" /> CA Filing Tracker</h2>
+            {/* Fix 5 — heading + pending badge */}
+            <div className="flex items-center gap-3">
+              <h2 className="text-xl font-bold flex items-center gap-2"><Activity className="w-6 h-6 text-emerald-400" /> CA Filing Tracker</h2>
+              {(() => {
+                const pending = filings.filter(f => f.status === 'PENDING' || f.status === 'IN_PROGRESS');
+                const allFiled = filings.length > 0 && pending.length === 0;
+                if (filings.length === 0) return null;
+                if (allFiled) return (
+                  <span className="bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 px-2.5 py-0.5 rounded-full text-xs font-bold">
+                    All filed ✓
+                  </span>
+                );
+                return (
+                  <span className="bg-yellow-500/15 text-yellow-400 border border-yellow-500/30 px-2.5 py-0.5 rounded-full text-xs font-bold animate-pulse">
+                    {pending.length} pending
+                  </span>
+                );
+              })()}
+            </div>
             <button onClick={() => setFilingModal({ ...filingModal, open: true })} className="bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2">
               <Plus className="w-4 h-4" /> Request Filing
             </button>
           </div>
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm text-left">
-              <thead className="bg-black/20 text-gray-400 uppercase text-xs">
-                <tr>
-                  <th className="px-6 py-4">Form</th>
-                  <th className="px-6 py-4">Deadline</th>
-                  <th className="px-6 py-4">Requested</th>
-                  <th className="px-6 py-4">Status</th>
-                  <th className="px-6 py-4">Ack Number</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-white/5">
-                {filings.length === 0 ? (
-                  <tr><td colSpan="5" className="px-6 py-8 text-center text-gray-500">No filing requests found.</td></tr>
-                ) : filings.map(f => (
-                  <tr key={f.id} className="hover:bg-white/5">
-                    <td className="px-6 py-4 font-bold text-white">{f.form_name}</td>
-                    <td className="px-6 py-4">{f.deadline}</td>
-                    <td className="px-6 py-4 text-gray-400">{new Date(f.requested_at).toLocaleDateString()}</td>
-                    <td className="px-6 py-4"><StatusBadge s={f.status} /></td>
-                    <td className="px-6 py-4">
-                      {f.status === 'FILED' ? (
-                        <div className="flex flex-col">
-                          <span className="font-mono text-green-400">{f.ack_number}</span>
-                          <span className="text-xs text-gray-500">{f.ack_portal}</span>
+
+          {/* ── What If Scenarios ── */}
+          {whatIf && whatIf.scenarios?.length > 0 && (
+            <div className="p-6 pb-2">
+              <div className="flex items-center gap-3 p-4 mb-6 bg-indigo-500/10 border border-indigo-500/30 rounded-xl">
+                <span className="text-xl">⚡</span>
+                <p className="text-indigo-300 font-bold text-sm">
+                  {fmt(whatIf.total_potential_saving)} in total savings identified across {whatIf.total_scenarios} scenarios
+                </p>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {whatIf.scenarios.map((s, i) => {
+                  const sent = sentScenarios[s.id] === 'sent';
+                  const sending = sentScenarios[s.id] === 'loading';
+                  return (
+                    <div key={i} className="bg-black/30 border border-white/5 rounded-2xl p-6 flex flex-col justify-between">
+                      <div>
+                        <div className="flex justify-between items-start mb-3">
+                          <span className={`text-[10px] font-bold px-2 py-0.5 rounded uppercase tracking-widest ${
+                            s.urgency === 'HIGH'
+                              ? 'bg-rose-500/20 text-rose-400 border border-rose-500/30'
+                              : 'bg-orange-500/20 text-orange-400 border border-orange-500/30'
+                          }`}>{s.urgency} Urgency</span>
+                          {s.days_to_act !== undefined && (
+                            <span className="text-xs text-gray-500 font-semibold">
+                              {s.days_to_act > 0 ? `${s.days_to_act} days to act` : 'Act immediately'}
+                            </span>
+                          )}
                         </div>
-                      ) : (
-                        <span className="text-gray-600">—</span>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                        <h3 className="text-lg font-black text-white mb-4 leading-snug">{s.title}</h3>
+                        <div className="space-y-3 mb-5">
+                          <div>
+                            <p className="text-[10px] text-gray-500 uppercase font-bold tracking-widest mb-0.5">Now</p>
+                            <p className="text-sm text-rose-400/90 font-medium">{s.current}</p>
+                          </div>
+                          <div>
+                            <p className="text-[10px] text-gray-500 uppercase font-bold tracking-widest mb-0.5">If Done</p>
+                            <p className="text-sm text-emerald-400/90 font-medium">{s.if_done}</p>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="pt-4 border-t border-white/5 flex items-center justify-between">
+                        <div>
+                          <p className="text-[10px] text-gray-500 uppercase font-bold tracking-widest mb-0.5">Potential Saving</p>
+                          <p className="text-xl font-black text-emerald-400">{fmt(s.saving)}</p>
+                        </div>
+                        <button
+                          onClick={() => handleSendScenario(s)}
+                          disabled={sent || sending}
+                          className={`px-5 py-2.5 rounded-xl text-sm font-bold uppercase tracking-wider transition-all flex items-center gap-2 ${
+                            sent
+                              ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 cursor-default'
+                              : sending
+                              ? 'bg-indigo-600/50 text-white cursor-wait'
+                              : 'bg-indigo-600 hover:bg-indigo-500 text-white'
+                          }`}
+                        >
+                          {sent ? (
+                            <span>&#10003; Sent to CA</span>
+                          ) : sending ? (
+                            <span>Sending&#8230;</span>
+                          ) : (
+                            <><Send className="w-3.5 h-3.5" /><span>Apply &#8594; Send to CA</span></>
+                          )}
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* ── Plain Filing Requests (deduped, excluding What If forms) ── */}
+          {(() => {
+            // Build set of form names already shown in What If scenarios
+            const whatIfForms = new Set(
+              (whatIf?.scenarios || []).map(s => (s.form || '').toLowerCase())
+            );
+            // Deduplicate by form_name, and skip forms already in What If
+            const seen = {};
+            const deduped = filings.filter(f => {
+              const key = f.form_name?.toLowerCase();
+              if (seen[key] || whatIfForms.has(key)) return false;
+              seen[key] = true;
+              return true;
+            });
+            if (deduped.length === 0) return null;
+            return (
+              <div className="p-6 pt-4">
+                {whatIf?.scenarios?.length > 0 && (
+                  <p className="text-[10px] text-gray-500 uppercase font-bold tracking-widest mb-4">Other Filing Requests</p>
+                )}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {deduped.map((f, i) => {
+                    const isFiled = f.status === 'FILED';
+                    const isInProgress = f.status === 'IN_PROGRESS';
+                    const isPending = f.status === 'PENDING';
+                    const ctx = getFormContext(f.form_name);
+                    const deadlineDate = f.deadline ? new Date(f.deadline) : null;
+                    const today = new Date();
+                    const daysLeft = deadlineDate ? Math.ceil((deadlineDate - today) / 86400000) : null;
+                    const isOverdue = daysLeft !== null && daysLeft < 0;
+                    const isDueSoon = daysLeft !== null && daysLeft >= 0 && daysLeft <= 7;
+                    const isFlashing = !!flashedRows[f.id];
+                    return (
+                      <motion.div
+                        key={f.id ?? i}
+                        animate={isFlashing ? { backgroundColor: ['#052e16', '#16a34a33', '#052e16'] } : {}}
+                        transition={{ duration: 1.2, ease: 'easeInOut' }}
+                        className={`rounded-2xl border p-6 flex flex-col justify-between transition-all ${
+                          isFiled ? 'bg-emerald-500/5 border-emerald-500/20'
+                          : isOverdue ? 'bg-rose-500/5 border-rose-500/20'
+                          : isInProgress ? 'bg-yellow-500/5 border-yellow-500/20'
+                          : 'bg-black/30 border-white/5 hover:border-white/10'
+                        }`}>
+                        {/* Header: urgency + deadline */}
+                        <div className="flex justify-between items-start mb-3">
+                          <span className={`text-[10px] font-bold px-2 py-0.5 rounded uppercase tracking-widest ${
+                            ctx.urgency === 'HIGH'
+                              ? 'bg-rose-500/20 text-rose-400 border border-rose-500/30'
+                              : ctx.urgency === 'LOW'
+                              ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30'
+                              : 'bg-orange-500/20 text-orange-400 border border-orange-500/30'
+                          }`}>{ctx.urgency} Urgency</span>
+                          {/* Fix 2 — visual status transitions */}
+                          {f.status === 'IN_PROGRESS'
+                            ? <span className="bg-yellow-500/10 text-yellow-400 border border-yellow-500/30 px-2 py-0.5 rounded text-xs font-semibold uppercase flex items-center gap-1.5 animate-pulse">
+                                <span className="w-1.5 h-1.5 rounded-full bg-yellow-400 inline-block" />CA is working on this...
+                              </span>
+                            : <StatusBadge s={f.status} />
+                          }
+                        </div>
+
+                        {/* Form name + section */}
+                        <div className="mb-1">
+                          {ctx.section && (
+                            <p className="text-[10px] font-mono text-indigo-400 mb-1">{ctx.section}</p>
+                          )}
+                          <h3 className="text-xl font-black text-white mb-2 leading-tight">{f.form_name}</h3>
+                          <p className="text-xs text-gray-400 leading-relaxed mb-4">{ctx.description}</p>
+                        </div>
+
+                        {/* NOW / IF DONE */}
+                        <div className="space-y-3 mb-4">
+                          <div>
+                            <p className="text-[10px] text-gray-500 uppercase font-bold tracking-widest mb-0.5">Now</p>
+                            <p className="text-sm text-rose-400/90 font-medium">{ctx.now}</p>
+                          </div>
+                          <div>
+                            <p className="text-[10px] text-gray-500 uppercase font-bold tracking-widest mb-0.5">If Done</p>
+                            <p className="text-sm text-emerald-400/90 font-medium">{ctx.if_done}</p>
+                          </div>
+                        </div>
+
+                        {/* Deadline + Requested */}
+                        <div className="grid grid-cols-2 gap-3 mb-4">
+                          <div>
+                            <p className="text-[10px] text-gray-500 uppercase tracking-widest font-bold mb-1">Deadline</p>
+                            <p className={`text-sm font-semibold ${
+                              isOverdue ? 'text-rose-400' : isDueSoon ? 'text-orange-400' : f.deadline ? 'text-white' : 'text-gray-600'
+                            }`}>
+                              {f.deadline
+                                ? isOverdue ? `${Math.abs(daysLeft)}d overdue` : isDueSoon ? `Due in ${daysLeft}d` : f.deadline
+                                : '—'}
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-[10px] text-gray-500 uppercase tracking-widest font-bold mb-1">Requested</p>
+                            <p className="text-sm font-semibold text-gray-300">
+                              {f.requested_at ? new Date(f.requested_at).toLocaleDateString('en-IN') : '—'}
+                            </p>
+                          </div>
+                        </div>
+
+                        {/* Fix 2 — Rich ack block for filed */}
+                        {isFiled && (
+                          <div className="mb-4 p-4 bg-emerald-500/10 border border-emerald-500/20 rounded-xl space-y-1.5">
+                            {f.ack_number && (
+                              <p className="font-mono text-emerald-300 text-sm font-bold tracking-wider">{f.ack_number}</p>
+                            )}
+                            {f.ack_portal && (
+                              <p className="text-xs text-gray-400">Filed via {f.ack_portal}</p>
+                            )}
+                            {f.filed_by && (
+                              <p className="text-xs text-gray-500">
+                                Filed by: <span className="text-gray-300">{f.filed_by}</span>
+                                {f.filed_at && (
+                                  <> &middot; {new Date(f.filed_at).toLocaleString('en-IN', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</>
+                                )}
+                              </p>
+                            )}
+                          </div>
+                        )}
+
+                        {/* Action */}
+                        <div className="pt-4 border-t border-white/5">
+                          {isFiled ? (
+                            <p className="text-emerald-400 text-sm font-semibold">&#10003; Filed &amp; Acknowledged</p>
+                          ) : (
+                            <button
+                              onClick={() => openAlertModal({ item: f.form_name, reason: ctx.now, deadline: f.deadline || 'N/A', penalty: 'N/A', law_ref: ctx.section || 'N/A' })}
+                              className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-bold border transition-all bg-indigo-600 hover:bg-indigo-500 border-indigo-500 text-white"
+                            >
+                              <Send className="w-4 h-4" />
+                              {isPending ? 'Send to CA' : 'Follow Up with CA'}
+                            </button>
+                          )}
+                        </div>
+                      </motion.div>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })()}
+
+          {(!whatIf?.scenarios?.length && filings.length === 0) && (
+            <div className="p-12 text-center text-gray-500">
+              <Activity className="w-12 h-12 mx-auto mb-4 opacity-20" />
+              <p className="font-medium">No filing requests yet.</p>
+              <p className="text-sm mt-1">Click "Request Filing" to dispatch a task to your CA.</p>
+            </div>
+          )}
         </div>
 
         {/* ROW 4: Regulatory Impact Feed */}
@@ -454,9 +862,116 @@ Current compliance status:
             </div>
           </div>
         </div>
-
+        {/* CA Responses Panel */}
+        {alertsSent.length > 0 && (
+          <div className="bg-[#111827] border border-white/10 rounded-2xl overflow-hidden">
+            <div className="p-5 border-b border-white/10 flex items-center gap-3">
+              <Bell className="w-5 h-5 text-indigo-400" />
+              <h2 className="text-lg font-bold">Alerts &amp; CA Responses</h2>
+              <span className="ml-auto text-[10px] text-gray-500 uppercase tracking-widest">Live &middot; every 5s</span>
+            </div>
+            <div className="divide-y divide-white/5">
+              {alertsSent.map((a, i) => {
+                const isAck = a.status === 'ACKNOWLEDGED';
+                const isRead = a.status === 'READ';
+                return (
+                  <div key={a.id ?? i} className={`px-5 py-4 transition-all ${isAck ? 'border-l-2 border-emerald-500 bg-emerald-500/[0.03]' : ''}`}>
+                    <div className="flex items-center gap-3 mb-2">
+                      <span className={`text-[9px] font-black px-2 py-0.5 rounded uppercase tracking-wider border ${
+                        a.urgency === 'EMERGENCY' ? 'bg-red-500/15 text-red-400 border-red-500/25'
+                        : a.urgency === 'HIGH' ? 'bg-orange-500/15 text-orange-400 border-orange-500/25'
+                        : 'bg-yellow-500/15 text-yellow-400 border-yellow-500/25'
+                      }`}>{a.urgency}</span>
+                      <p className="text-sm font-semibold text-white flex-1 truncate">{a.regulation_title}</p>
+                      <div className="flex items-center gap-2 flex-shrink-0">
+                        <span className="text-[10px] text-gray-500">{a.sent_at ? new Date(a.sent_at).toLocaleDateString('en-IN') : '—'}</span>
+                        <span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded border ${
+                          isAck ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/25'
+                          : isRead ? 'bg-blue-500/15 text-blue-400 border-blue-500/25'
+                          : 'bg-gray-500/15 text-gray-400 border-gray-500/25'
+                        }`}>
+                          {isAck ? '✅ Acknowledged' : isRead ? 'Read' : 'Unread'}
+                        </span>
+                      </div>
+                    </div>
+                    {isAck && a.ca_response && (
+                      <div className="mt-2 bg-indigo-950/70 border border-indigo-500/20 rounded-xl px-4 py-3">
+                        <p className="text-[9px] text-indigo-400 font-black uppercase tracking-widest mb-1">CA Response</p>
+                        <p className="text-sm text-gray-100 leading-relaxed italic">&ldquo;{a.ca_response}&rdquo;</p>
+                        {a.acknowledged_at && (
+                          <p className="text-[10px] text-gray-500 mt-1.5">
+                            &mdash; Replied {new Date(a.acknowledged_at).toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
+                          </p>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
 
       </div>
+
+      {/* CA Response Toast (acknowledgement from CA portal alerts) */}
+      <AnimatePresence>
+        {toast && (
+          <motion.div
+            key={toast.id}
+            initial={{ opacity: 0, y: 40 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 40 }}
+            className="fixed bottom-6 right-6 z-[100] bg-[#0a1f14] border border-emerald-500/50 text-emerald-300 px-5 py-4 rounded-2xl shadow-2xl flex items-start gap-3 max-w-sm"
+          >
+            <CheckCircle className="w-5 h-5 text-emerald-400 flex-shrink-0 mt-0.5" />
+            <div className="flex-1">
+              <p className="text-xs font-black text-emerald-400 uppercase tracking-widest mb-1">CA Responded</p>
+              <p className="text-sm font-medium leading-snug">{toast.message}</p>
+            </div>
+            <button onClick={() => setToast(null)} className="text-emerald-500/50 hover:text-emerald-400 flex-shrink-0">
+              <X className="w-4 h-4" />
+            </button>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Fix 3 — Filing Confirmed Toast */}
+      <AnimatePresence>
+        {filingToast && (
+          <motion.div
+            key={filingToast.id}
+            initial={{ opacity: 0, x: 60 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: 60 }}
+            className="fixed bottom-24 right-6 z-[100] bg-[#0a1f14] border-2 border-emerald-500/60 rounded-2xl shadow-2xl w-80 overflow-hidden"
+          >
+            <div className="px-5 pt-4 pb-3">
+              <div className="flex items-center gap-2 mb-3">
+                <CheckCircle className="w-5 h-5 text-emerald-400 flex-shrink-0" />
+                <p className="text-sm font-black text-emerald-400 uppercase tracking-widest">Filing Confirmed</p>
+                <button onClick={() => setFilingToast(null)} className="ml-auto text-emerald-600 hover:text-emerald-400">
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+              <p className="text-sm text-white font-semibold mb-0.5">{filingToast.form} filed by {filingToast.ca}</p>
+              {filingToast.ack && (
+                <p className="font-mono text-emerald-300 text-xs font-bold mb-0.5">Ack No: {filingToast.ack}</p>
+              )}
+              <p className="text-xs text-gray-400 mb-3">Via: {filingToast.portal}</p>
+              <p className="text-[10px] text-yellow-400/80 font-semibold uppercase tracking-wider">Risk score recalculating...</p>
+            </div>
+            <div className="h-1 bg-emerald-500/20">
+              <motion.div
+                className="h-full bg-emerald-500"
+                initial={{ width: '100%' }}
+                animate={{ width: '0%' }}
+                transition={{ duration: 6, ease: 'linear' }}
+              />
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* ── Modals ── */}
 

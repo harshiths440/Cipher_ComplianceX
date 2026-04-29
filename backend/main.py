@@ -75,6 +75,8 @@ def _load_companies() -> list[dict]:
 async def lifespan(app: FastAPI):
     """Start background scheduler before the server begins accepting requests."""
     start_scheduler()
+    from alerts import seed_demo_alerts
+    seed_demo_alerts()
     yield
     # (scheduler stops automatically when the process exits)
 
@@ -800,7 +802,8 @@ async def get_executive_view(cin: str):
     - Total penalty exposure from rule engine violations
     - Signature-required items (director / board action needed)
     - Regulatory news items relevant to the company sector
-    - CA audit summary (filing health at a glance)
+    - CA audit summary (filing health at a glance, verified_filings list)
+    - What-If tax savings bundled (no extra /tax call needed)
     - Pending filing requests and unread alerts
     """
     companies = _load_companies()
@@ -809,10 +812,52 @@ async def get_executive_view(cin: str):
         raise HTTPException(status_code=404, detail=f"Company with CIN '{cin}' not found.")
 
     from rule_engine import RuleEngine
+    import re as _re
     violations = RuleEngine().evaluate(company)
 
+    # ── Penalty parser: extract first integer from strings like "₹200/day" ───
+    def _parse_penalty_int(penalty_str: str, default_days: int = 30) -> int:
+        if isinstance(penalty_str, (int, float)):
+            return int(penalty_str) * default_days
+        s = str(penalty_str).replace(",", "")
+        m = _re.search(r"(\d+)", s)
+        if not m:
+            return 0
+        amount = int(m.group(1))
+        if "/day" in penalty_str.lower() or "per day" in penalty_str.lower():
+            return amount * default_days
+        return amount
+
+    # ── Violations fallback: if rule engine returns nothing, use filing_history
+    if not violations:
+        filing_history = company.get("filing_history", [])
+        from datetime import date as _date_cls
+        today = _date_cls.today()
+        for filing in filing_history:
+            try:
+                filed = _date_cls.fromisoformat(filing.get("date", "2000-01-01"))
+                days_since = (today - filed).days
+            except Exception:
+                days_since = 999
+            if days_since > 365:
+                violations.append({
+                    "rule":              "Overdue ROC Filing",
+                    "description":       f"{filing.get('form', 'Unknown form')} has not been filed in over a year.",
+                    "severity":          "HIGH",
+                    "penalty":           "₹200/day",
+                    "penalty_amount_inr": 200 * 30,
+                    "law_reference":     "Companies Act 2013 — Section 92(5)",
+                })
+
     # ── Exposure totals ──────────────────────────────────────────────────────
-    total_exposure = sum(v.get("penalty_amount_inr", 0) for v in violations)
+    total_exposure = 0
+    for v in violations:
+        raw = v.get("penalty_amount_inr")
+        if raw:
+            total_exposure += int(raw)
+        else:
+            total_exposure += _parse_penalty_int(v.get("penalty", "0"))
+
     critical_count = sum(1 for v in violations if v["severity"] == "CRITICAL")
     high_count     = sum(1 for v in violations if v["severity"] == "HIGH")
 
@@ -825,7 +870,19 @@ async def get_executive_view(cin: str):
             if meta:
                 signature_required.append(meta)
 
-    # De-duplicate (disqualified director rule can fire multiple times)
+    # Fallback: map HIGH/CRITICAL violations that have no _SIGNATURE_META entry
+    if not signature_required:
+        for v in violations:
+            if v["severity"] in ("HIGH", "CRITICAL"):
+                signature_required.append({
+                    "item":     v.get("description", v["rule"]),
+                    "reason":   v.get("description", "This violation requires executive action."),
+                    "deadline": "Immediate",
+                    "penalty":  v.get("penalty", "See violation details"),
+                    "law_ref":  v.get("law_reference", "N/A"),
+                })
+
+    # De-duplicate
     seen_items: set[str] = set()
     deduped_sigs = []
     for s in signature_required:
@@ -834,7 +891,7 @@ async def get_executive_view(cin: str):
             deduped_sigs.append(s)
 
     # ── Regulatory impact cross-reference ────────────────────────────────────
-    sector       = company.get("sector", "")
+    sector        = company.get("sector", "")
     relevant_cats = _SECTOR_NEWS_MAP.get(sector, ["Corporate", "Tax"])
 
     try:
@@ -842,35 +899,52 @@ async def get_executive_view(cin: str):
     except Exception:
         all_news = FALLBACK_NEWS
 
-    # Filter to relevant categories; attach a concise impact_on_company note
     regulatory_impact = []
     for item in all_news:
         if item.get("category") in relevant_cats:
-            impact_note = (
-                f"This regulation affects {sector} companies in {company.get('city', 'India')}. "
-                f"Deadline: {item.get('deadline', 'As notified')}. "
-                f"Penalty: {item.get('penalty', 'See regulation text')}."
+            cat = item.get("category", "")
+            cat_reasons = _SECTOR_REASONS.get(cat, {})
+            relevance_reason = (
+                cat_reasons.get(sector)
+                or cat_reasons.get("default", f"{cat} regulations apply to your company.")
             )
-            regulatory_impact.append({**item, "impact_on_company": impact_note})
-        if len(regulatory_impact) >= 6:   # cap at 6 for executive brevity
+            regulatory_impact.append({
+                **item,
+                "impact_on_company": (
+                    f"This regulation affects {sector} companies in {company.get('city', 'India')}. "
+                    f"Deadline: {item.get('deadline', 'As notified')}. "
+                    f"Penalty: {item.get('penalty', 'See regulation text')}."
+                ),
+                "relevance_reason": relevance_reason,
+            })
+        if len(regulatory_impact) >= 6:
             break
 
-    # ── CA summary ───────────────────────────────────────────────────────────
+    # ── CA summary (with full verified_filings list) ──────────────────────────
     try:
         ca_result = verify_ca_filings(company, all_news)
     except Exception:
         ca_result = {"total_filings": 0, "at_risk_count": 0, "outdated_count": 0, "verified_filings": []}
 
-    # Pick most recent verified filing for "last filed" info
-    last_filing = ca_result["verified_filings"][0] if ca_result.get("verified_filings") else None
+    verified_filings = ca_result.get("verified_filings", [])
+    last_filing = verified_filings[0] if verified_filings else None
     ca_summary = {
-        "total_filings":  ca_result.get("total_filings", 0),
-        "at_risk_count":  ca_result.get("at_risk_count", 0),
-        "outdated_count": ca_result.get("outdated_count", 0),
-        "last_filed_date": last_filing["filed_date"]  if last_filing else None,
-        "last_filed_form": last_filing["form"]        if last_filing else None,
-        "last_ca_name":    last_filing["filed_by"]    if last_filing else None,
+        "total_filings":    ca_result.get("total_filings", 0),
+        "at_risk_count":    ca_result.get("at_risk_count", 0),
+        "outdated_count":   ca_result.get("outdated_count", 0),
+        "last_filed_date":  last_filing["filed_date"] if last_filing else None,
+        "last_filed_form":  last_filing["form"]       if last_filing else None,
+        "last_ca_name":     last_filing["filed_by"]   if last_filing else None,
+        "verified_filings": verified_filings,
     }
+
+    # ── What-If tax data (bundled — no extra /tax call needed) ───────────────
+    try:
+        from tax_expert import compute_tax_analysis, compute_what_if
+        tax_data = compute_tax_analysis(company)
+        what_if  = compute_what_if(company, tax_data)
+    except Exception:
+        what_if = None
 
     # ── Filing requests & alerts ──────────────────────────────────────────────
     filing_requests = get_filing_requests(cin)
